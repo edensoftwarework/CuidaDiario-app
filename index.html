@@ -21,7 +21,7 @@
     
     <title>CuidaDiario - App para Cuidadores Familiares | EDEN SoftWork</title>
     
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="css/styles.css">
     
     <!-- Preconnect para optimizar carga de recursos externos -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -46,13 +46,16 @@
                     <li><a href="#tareas" class="nav-link" data-section="tareas">Tareas</a></li>
                     <li><a href="#contactos" class="nav-link" data-section="contactos">Contactos</a></li>
                     <li><a href="#reportes" class="nav-link" data-section="reportes">Reportes</a></li>
-                    <li><a href="about.html" class="nav-link">Sobre Nosotros</a></li>
+                    <li><a href="pages/about.html" class="nav-link">Sobre Nosotros</a></li>
                 </ul>
             </nav>
             <div class="header-actions">
                 <button class="btn-premium" id="btnPremium">
                     <span class="premium-icon">⭐</span>
                     <span id="premiumText">Obtener Premium</span>
+                </button>
+                <button class="btn-secondary" onclick="API.logout()" style="margin-left: 10px;">
+                    Cerrar Sesión
                 </button>
             </div>
         </div>
@@ -381,9 +384,9 @@
                 <div class="footer-links">
                     <h4>Enlaces</h4>
                     <ul>
-                        <li><a href="about.html">Sobre Nosotros</a></li>
-                        <li><a href="privacy.html">Política de Privacidad</a></li>
-                        <li><a href="terms.html">Términos de Uso</a></li>
+                        <li><a href="pages/about.html">Sobre Nosotros</a></li>
+                        <li><a href="pages/privacy.html">Política de Privacidad</a></li>
+                        <li><a href="pages/terms.html">Términos de Uso</a></li>
                         <li><a href="mailto:contacto@edensoftwork.com">Contacto</a></li>
                     </ul>
                 </div>
@@ -764,10 +767,25 @@
     </div>
 
     <!-- Scripts -->
-    <script src="storage.js"></script>
-    <script src="notifications.js"></script>
-    <script src="payments.js"></script>
-    <script src="reports.js"></script>
-    <script src="app.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/storage.js"></script>
+    <script src="js/notifications.js"></script>
+    <script src="js/payments.js"></script>
+    <script src="js/reports.js"></script>
+    <script src="js/app.js"></script>
+    
+    <script>
+        // Verificar autenticación al cargar
+        if (!API.isAuthenticated()) {
+            window.location.href = 'login.html';
+        }
+        
+        // Mostrar nombre de usuario
+        const user = API.getUser();
+        if (user) {
+            document.querySelector('.logo-subtitle').textContent = `Hola, ${user.nombre}`;
+        }
+    </script>
 </body>
 </html>
+

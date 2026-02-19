@@ -7,8 +7,8 @@ const Reports = {
     /**
      * Generar reporte completo
      */
-    generarReporteCompleto() {
-        if (!Storage.isPremium()) {
+    async generarReporteCompleto() {
+        if (!Storage.getPremiumStatus()) {
             showPremiumModal();
             return;
         }
@@ -21,21 +21,21 @@ const Reports = {
             return;
         }
 
-        const data = this.getReporteData(desde, hasta);
+        const data = await this.getReporteData(desde, hasta);
         this.generarPDF(data, 'Reporte Completo');
     },
 
     /**
      * Generar reporte de medicamentos
      */
-    generarReporteMedicamentos() {
-        if (!Storage.isPremium()) {
+    async generarReporteMedicamentos() {
+        if (!Storage.getPremiumStatus()) {
             showPremiumModal();
             return;
         }
 
         const historial = Storage.getHistorialMedicamentos();
-        const medicamentos = Storage.getMedicamentos();
+        const medicamentos = await Storage.getMedicamentos();
 
         const html = this.generateMedicamentosHTML(medicamentos, historial);
         this.downloadHTML(html, 'reporte-medicamentos.html');
@@ -44,15 +44,15 @@ const Reports = {
     /**
      * Generar reporte médico
      */
-    generarReporteMedico() {
-        if (!Storage.isPremium()) {
+    async generarReporteMedico() {
+        if (!Storage.getPremiumStatus()) {
             showPremiumModal();
             return;
         }
 
-        const sintomas = Storage.getSintomas();
+        const sintomas = await Storage.getSintomas();
         const signos = Storage.getSignosVitales();
-        const citas = Storage.getCitas();
+        const citas = await Storage.getCitas();
 
         const html = this.generateMedicoHTML(sintomas, signos, citas);
         this.downloadHTML(html, 'reporte-medico.html');
@@ -61,7 +61,7 @@ const Reports = {
     /**
      * Obtener datos para reporte en rango de fechas
      */
-    getReporteData(desde, hasta) {
+    async getReporteData(desde, hasta) {
         const fechaDesde = new Date(desde);
         const fechaHasta = new Date(hasta);
         fechaHasta.setHours(23, 59, 59, 999);
@@ -71,15 +71,23 @@ const Reports = {
             return itemDate >= fechaDesde && itemDate <= fechaHasta;
         };
 
+        const [medicamentos, citas, sintomas, tareas, contactos] = await Promise.all([
+            Storage.getMedicamentos(),
+            Storage.getCitas(),
+            Storage.getSintomas(),
+            Storage.getTareas(),
+            Storage.getContactos()
+        ]);
+
         return {
             periodo: { desde, hasta },
-            medicamentos: Storage.getMedicamentos(),
+            medicamentos,
             historialMed: Storage.getHistorialMedicamentos().filter(h => filterByDate(h, 'fecha')),
-            citas: Storage.getCitas().filter(c => filterByDate({ fecha: c.fecha }, 'fecha')),
-            sintomas: Storage.getSintomas().filter(s => filterByDate(s, 'fecha')),
+            citas: citas.filter(c => filterByDate({ fecha: c.fecha }, 'fecha')),
+            sintomas: sintomas.filter(s => filterByDate(s, 'fecha')),
             signos: Storage.getSignosVitales().filter(s => filterByDate(s, 'fecha')),
-            tareas: Storage.getTareas().filter(t => filterByDate(t, 'fecha')),
-            contactos: Storage.getContactos()
+            tareas: tareas.filter(t => filterByDate(t, 'fecha')),
+            contactos
         };
     },
 
@@ -278,7 +286,7 @@ const Reports = {
      * Exportar datos como JSON
      */
     exportarDatos() {
-        if (!Storage.isPremium()) {
+        if (!Storage.getPremiumStatus()) {
             showPremiumModal();
             return;
         }
@@ -303,7 +311,7 @@ const Reports = {
      * Importar datos desde JSON
      */
     importarDatos(event) {
-        if (!Storage.isPremium()) {
+        if (!Storage.getPremiumStatus()) {
             showPremiumModal();
             return;
         }
@@ -495,3 +503,4 @@ window.exportarDatos = () => Reports.exportarDatos();
 window.importarDatos = (event) => Reports.importarDatos(event);
 
 window.Reports = Reports;
+

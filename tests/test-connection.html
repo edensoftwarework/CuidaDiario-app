@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test de Conexión - CuidaDiario</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+        
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        
+        .test-item {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-left: 4px solid #ddd;
+        }
+        
+        .test-item.success {
+            border-left-color: #28a745;
+            background: #d4edda;
+        }
+        
+        .test-item.error {
+            border-left-color: #dc3545;
+            background: #f8d7da;
+        }
+        
+        .test-item.warning {
+            border-left-color: #ffc107;
+            background: #fff3cd;
+        }
+        
+        .test-item h3 {
+            font-size: 16px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .test-item p {
+            font-size: 14px;
+            color: #555;
+            line-height: 1.6;
+        }
+        
+        .icon {
+            font-size: 24px;
+        }
+        
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 16px;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 20px;
+            transition: background 0.3s;
+        }
+        
+        button:hover {
+            background: #5568d3;
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .api-url {
+            background: #e9ecef;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            word-break: break-all;
+            margin: 10px 0;
+        }
+        
+        .success-text {
+            color: #28a745;
+            font-weight: bold;
+        }
+        
+        .error-text {
+            color: #dc3545;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Test de Conexión</h1>
+        <p class="subtitle">Verificación del frontend y backend de CuidaDiario</p>
+        
+        <div id="results">
+            <div class="loading">
+                <div class="spinner"></div>
+                <p>Ejecutando tests...</p>
+            </div>
+        </div>
+        
+        <button id="retestBtn" style="display: none;" onclick="runTests()">🔄 Volver a Probar</button>
+    </div>
+
+    <script src="../js/api.js"></script>
+    <script src="../js/storage.js"></script>
+    <script>
+        async function runTests() {
+            const resultsDiv = document.getElementById('results');
+            const retestBtn = document.getElementById('retestBtn');
+            
+            resultsDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Ejecutando tests...</p></div>';
+            retestBtn.style.display = 'none';
+            
+            const tests = [];
+            
+            // Test 1: API.js cargado
+            tests.push({
+                name: 'API Client',
+                icon: '📦',
+                test: () => typeof API !== 'undefined',
+                successMsg: 'api.js cargado correctamente',
+                errorMsg: 'api.js no se pudo cargar'
+            });
+            
+            // Test 2: URL configurada
+            tests.push({
+                name: 'URL del Backend',
+                icon: '🌐',
+                test: () => {
+                    if (!API.BASE_URL) return { status: false, msg: 'BASE_URL no definida' };
+                    if (API.BASE_URL.includes('tu-backend')) {
+                        return { status: 'warning', msg: `URL no configurada: ${API.BASE_URL}` };
+                    }
+                    return { status: true, msg: `Configurada: ${API.BASE_URL}` };
+                },
+                successMsg: '',
+                errorMsg: ''
+            });
+            
+            // Test 3: Conexión al backend
+            let backendOnline = false;
+            tests.push({
+                name: 'Conexión al Backend',
+                icon: '🔌',
+                test: async () => {
+                    try {
+                        const response = await fetch(`${API.BASE_URL}/api/test`, {
+                            method: 'GET',
+                            headers: { 'Content-Type': 'application/json' }
+                        });
+                        backendOnline = response.ok;
+                        return backendOnline ? 
+                            { status: true, msg: 'Backend respondiendo correctamente' } :
+                            { status: false, msg: `Backend responde con error ${response.status}` };
+                    } catch (error) {
+                        return { status: false, msg: `Error de conexión: ${error.message}` };
+                    }
+                },
+                successMsg: '',
+                errorMsg: ''
+            });
+            
+            // Test 4: Storage.js
+            tests.push({
+                name: 'Storage Module',
+                icon: '💾',
+                test: () => typeof Storage !== 'undefined' && typeof Storage.getMedicamentos === 'function',
+                successMsg: 'storage.js cargado correctamente',
+                errorMsg: 'storage.js no disponible'
+            });
+            
+            // Test 5: LocalStorage disponible
+            tests.push({
+                name: 'LocalStorage',
+                icon: '🗄️',
+                test: () => {
+                    try {
+                        localStorage.setItem('test', 'test');
+                        localStorage.removeItem('test');
+                        return true;
+                    } catch (e) {
+                        return false;
+                    }
+                },
+                successMsg: 'LocalStorage disponible',
+                errorMsg: 'LocalStorage bloqueado o no disponible'
+            });
+            
+            // Ejecutar tests
+            let html = '';
+            let allPassed = true;
+            
+            for (const test of tests) {
+                let result;
+                try {
+                    result = typeof test.test === 'function' ? await test.test() : test.test;
+                } catch (error) {
+                    result = { status: false, msg: error.message };
+                }
+                
+                let status, message, className;
+                
+                if (typeof result === 'object') {
+                    status = result.status;
+                    message = result.msg;
+                } else {
+                    status = result;
+                    message = result ? test.successMsg : test.errorMsg;
+                }
+                
+                if (status === 'warning') {
+                    className = 'warning';
+                    allPassed = false;
+                } else if (status === true) {
+                    className = 'success';
+                } else {
+                    className = 'error';
+                    allPassed = false;
+                }
+                
+                html += `
+                    <div class="test-item ${className}">
+                        <h3>
+                            <span class="icon">${test.icon}</span>
+                            ${test.name}
+                        </h3>
+                        <p>${message}</p>
+                    </div>
+                `;
+            }
+            
+            // Resumen final
+            if (allPassed) {
+                html += `
+                    <div class="test-item success">
+                        <h3>
+                            <span class="icon">✅</span>
+                            ¡Todo listo!
+                        </h3>
+                        <p class="success-text">El frontend está correctamente configurado y el backend está en línea.</p>
+                        <p style="margin-top: 10px;">
+                            <a href="login.html" style="color: #667eea; text-decoration: none; font-weight: bold;">
+                                → Ir a Login
+                            </a>
+                        </p>
+                    </div>
+                `;
+            } else {
+                html += `
+                    <div class="test-item ${backendOnline ? 'warning' : 'error'}">
+                        <h3>
+                            <span class="icon">⚠️</span>
+                            Acción Requerida
+                        </h3>
+                        <p class="error-text">
+                            ${!backendOnline ? 
+                                'Verifica que el backend esté corriendo y que la URL en api.js sea correcta.' :
+                                'Algunos tests fallaron. Revisa los mensajes arriba.'}
+                        </p>
+                        <p style="margin-top: 10px;">
+                            <strong>Pasos:</strong><br>
+                            1. Abre <code>api.js</code><br>
+                            2. Cambia <code>BASE_URL</code> por la URL de tu backend en Railway<br>
+                            3. Guarda y recarga esta página
+                        </p>
+                    </div>
+                `;
+            }
+            
+            resultsDiv.innerHTML = html;
+            retestBtn.style.display = 'block';
+        }
+        
+        // Ejecutar tests al cargar
+        window.addEventListener('DOMContentLoaded', runTests);
+    </script>
+</body>
+</html>

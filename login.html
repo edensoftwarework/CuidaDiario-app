@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - CuidaDiario | EDEN SoftWork</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        .login-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+        }
+        
+        .login-box {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            padding: 40px;
+            max-width: 450px;
+            width: 100%;
+        }
+        
+        .login-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .login-header h1 {
+            color: #667eea;
+            margin-bottom: 5px;
+            font-size: 2rem;
+        }
+        
+        .login-header p {
+            color: #666;
+            font-size: 0.9rem;
+        }
+        
+        .form-tabs {
+            display: flex;
+            margin-bottom: 25px;
+            border-bottom: 2px solid #eee;
+        }
+        
+        .form-tab {
+            flex: 1;
+            padding: 12px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            color: #666;
+            transition: all 0.3s;
+            border-bottom: 3px solid transparent;
+        }
+        
+        .form-tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+            font-weight: 600;
+        }
+        
+        .form-content {
+            display: none;
+        }
+        
+        .form-content.active {
+            display: block;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+        }
+        
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+        
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .btn-submit {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        .btn-submit:hover {
+            transform: translateY(-2px);
+        }
+        
+        .btn-submit:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .error-message {
+            background: #fee;
+            color: #c33;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        
+        .success-message {
+            background: #efe;
+            color: #3c3;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        
+        .login-footer {
+            margin-top: 25px;
+            text-align: center;
+            color: #666;
+            font-size: 0.9rem;
+        }
+        
+        .login-footer a {
+            color: #667eea;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-box">
+            <div class="login-header">
+                <h1>CuidaDiario</h1>
+                <p>by EDEN SoftWork</p>
+            </div>
+            
+            <div class="form-tabs">
+                <button class="form-tab active" onclick="switchTab('login')">Iniciar Sesión</button>
+                <button class="form-tab" onclick="switchTab('register')">Registrarse</button>
+            </div>
+            
+            <div id="errorMessage" class="error-message"></div>
+            <div id="successMessage" class="success-message"></div>
+            
+            <!-- Formulario de Login -->
+            <div id="loginForm" class="form-content active">
+                <form onsubmit="handleLogin(event)">
+                    <div class="form-group">
+                        <label for="loginEmail">Email</label>
+                        <input type="email" id="loginEmail" required placeholder="tu@email.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="loginPassword">Contraseña</label>
+                        <input type="password" id="loginPassword" required placeholder="Tu contraseña">
+                    </div>
+                    <button type="submit" class="btn-submit" id="btnLogin">Iniciar Sesión</button>
+                </form>
+            </div>
+            
+            <!-- Formulario de Registro -->
+            <div id="registerForm" class="form-content">
+                <form onsubmit="handleRegister(event)">
+                    <div class="form-group">
+                        <label for="registerNombre">Nombre completo</label>
+                        <input type="text" id="registerNombre" required placeholder="Tu nombre">
+                    </div>
+                    <div class="form-group">
+                        <label for="registerEmail">Email</label>
+                        <input type="email" id="registerEmail" required placeholder="tu@email.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="registerPassword">Contraseña</label>
+                        <input type="password" id="registerPassword" required minlength="6" placeholder="Mínimo 6 caracteres">
+                    </div>
+                    <div class="form-group">
+                        <label for="registerPasswordConfirm">Confirmar contraseña</label>
+                        <input type="password" id="registerPasswordConfirm" required minlength="6" placeholder="Repite tu contraseña">
+                    </div>
+                    <button type="submit" class="btn-submit" id="btnRegister">Registrarse</button>
+                </form>
+            </div>
+            
+            <div class="login-footer">
+                <p>¿Primera vez aquí? Regístrate gratis para empezar.</p>
+                <p><a href="pages/about.html">Sobre Nosotros</a> | <a href="pages/privacy.html">Privacidad</a></p>
+            </div>
+        </div>
+    </div>
+    
+    <script src="js/api.js"></script>
+    <script>
+        function switchTab(tab) {
+            // Actualizar tabs
+            document.querySelectorAll('.form-tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            // Actualizar contenido
+            document.querySelectorAll('.form-content').forEach(c => c.classList.remove('active'));
+            document.getElementById(tab + 'Form').classList.add('active');
+            
+            // Limpiar mensajes
+            hideMessages();
+        }
+        
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            document.getElementById('successMessage').style.display = 'none';
+        }
+        
+        function showSuccess(message) {
+            const successDiv = document.getElementById('successMessage');
+            successDiv.textContent = message;
+            successDiv.style.display = 'block';
+            document.getElementById('errorMessage').style.display = 'none';
+        }
+        
+        function hideMessages() {
+            document.getElementById('errorMessage').style.display = 'none';
+            document.getElementById('successMessage').style.display = 'none';
+        }
+        
+        async function handleLogin(event) {
+            event.preventDefault();
+            hideMessages();
+            
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+            const btnLogin = document.getElementById('btnLogin');
+            
+            try {
+                btnLogin.disabled = true;
+                btnLogin.textContent = 'Iniciando sesión...';
+                
+                await API.login(email, password);
+                
+                showSuccess('¡Inicio de sesión exitoso! Redirigiendo...');
+                setTimeout(() => {
+                    window.location.href = 'index.html';
+                }, 1000);
+                
+            } catch (error) {
+                showError(error.message);
+                btnLogin.disabled = false;
+                btnLogin.textContent = 'Iniciar Sesión';
+            }
+        }
+        
+        async function handleRegister(event) {
+            event.preventDefault();
+            hideMessages();
+            
+            const nombre = document.getElementById('registerNombre').value;
+            const email = document.getElementById('registerEmail').value;
+            const password = document.getElementById('registerPassword').value;
+            const passwordConfirm = document.getElementById('registerPasswordConfirm').value;
+            const btnRegister = document.getElementById('btnRegister');
+            
+            if (password !== passwordConfirm) {
+                showError('Las contraseñas no coinciden');
+                return;
+            }
+            
+            try {
+                btnRegister.disabled = true;
+                btnRegister.textContent = 'Registrando...';
+                
+                await API.register(nombre, email, password);
+                
+                showSuccess('¡Registro exitoso! Ahora inicia sesión.');
+                
+                // Cambiar a tab de login después de 2 segundos
+                setTimeout(() => {
+                    document.querySelectorAll('.form-tab')[0].click();
+                    document.getElementById('loginEmail').value = email;
+                }, 2000);
+                
+            } catch (error) {
+                showError(error.message);
+            } finally {
+                btnRegister.disabled = false;
+                btnRegister.textContent = 'Registrarse';
+            }
+        }
+        
+        // Redirigir si ya está autenticado
+        if (API.isAuthenticated()) {
+            window.location.href = 'index.html';
+        }
+    </script>
+</body>
+</html>

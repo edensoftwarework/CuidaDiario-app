@@ -126,8 +126,10 @@ const Notifications = {
     /**
      * Comprobar recordatorios de medicamentos
      */
-    checkMedicamentos() {
-        const medicamentos = Storage.getMedicamentos();
+    async checkMedicamentos() {
+        const medicamentos = await Storage.getMedicamentos();
+        if (!medicamentos || !Array.isArray(medicamentos)) return;
+        
         const now = new Date();
         const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
@@ -198,8 +200,10 @@ const Notifications = {
     /**
      * Comprobar recordatorios de citas
      */
-    checkCitas() {
-        const citas = Storage.getCitas();
+    async checkCitas() {
+        const citas = await Storage.getCitas();
+        if (!citas || !Array.isArray(citas)) return;
+        
         const now = new Date();
 
         citas.forEach(cita => {
@@ -243,12 +247,15 @@ const Notifications = {
     /**
      * Comprobar recordatorios de tareas
      */
-    checkTareas() {
-        const tareas = Storage.getTareas().filter(t => !t.completada);
+    async checkTareas() {
+        const tareas = await Storage.getTareas();
+        if (!tareas || !Array.isArray(tareas)) return;
+        
+        const tareasPendientes = tareas.filter(t => !t.completada);
         const now = new Date();
         const today = now.toISOString().split('T')[0];
 
-        tareas.forEach(tarea => {
+        tareasPendientes.forEach(tarea => {
             if (!tarea.recordatorio || tarea.fecha !== today) return;
 
             if (tarea.hora) {

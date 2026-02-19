@@ -35,7 +35,7 @@ const Payments = {
      */
     async procesarPago(method, currency, amount) {
         // Verificar si ya es premium
-        if (Storage.isPremium()) {
+        if (Storage.getPremiumStatus()) {
             alert('¡Ya eres usuario Premium! Disfruta de todas las funcionalidades.');
             return;
         }
@@ -399,3 +399,4 @@ window.procesarPago = (method, currency, amount) => {
 };
 
 window.Payments = Payments;
+

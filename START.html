@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎯 Inicio - CuidaDiario</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 50px;
+            max-width: 800px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+        h1 {
+            color: #667eea;
+            font-size: 48px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 40px;
+            font-size: 18px;
+        }
+        .card {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 20px;
+            border-left: 5px solid #667eea;
+        }
+        .card h2 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 24px;
+        }
+        .card p {
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 15px;
+        }
+        .btn-group {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        .btn {
+            padding: 15px 30px;
+            border-radius: 10px;
+            text-decoration: none;
+            font-weight: bold;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            transition: all 0.3s;
+            font-size: 16px;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+        .btn-warning {
+            background: #ffc107;
+            color: #333;
+        }
+        .btn-info {
+            background: #17a2b8;
+            color: white;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+        .warning-box {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        .warning-box h3 {
+            color: #856404;
+            margin-bottom: 10px;
+        }
+        .checklist {
+            background: #e7f3ff;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .checklist-item {
+            padding: 10px;
+            margin: 5px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .icon { font-size: 24px; }
+        @media (max-width: 768px) {
+            .container { padding: 30px 20px; }
+            h1 { font-size: 36px; }
+            .btn-group { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 CuidaDiario</h1>
+        <p class="subtitle">Proyecto reorganizado y listo para usar</p>
+        
+        <div class="warning-box">
+            <h3>⚠️ ATENCIÓN: Backend Necesita Correcciones</h3>
+            <p>He encontrado <strong>7 problemas críticos</strong> en tu backend que debes corregir antes de usar la aplicación.</p>
+            <p style="margin-top: 10px;">
+                <strong>📖 Lee primero:</strong> 
+                <a href="docs/BACKEND_ISSUES.md" style="color: #667eea; font-weight: bold;">docs/BACKEND_ISSUES.md</a>
+            </p>
+        </div>
+        
+        <div class="card">
+            <h2>📋 Pasos para Empezar</h2>
+            <div class="checklist">
+                <div class="checklist-item">
+                    <span class="icon">1️⃣</span>
+                    <span><strong>Leer:</strong> docs/BACKEND_ISSUES.md</span>
+                </div>
+                <div class="checklist-item">
+                    <span class="icon">2️⃣</span>
+                    <span><strong>Corregir:</strong> Backend según indicaciones</span>
+                </div>
+                <div class="checklist-item">
+                    <span class="icon">3️⃣</span>
+                    <span><strong>Configurar:</strong> URL en js/api.js (línea 11)</span>
+                </div>
+                <div class="checklist-item">
+                    <span class="icon">4️⃣</span>
+                    <span><strong>Probar:</strong> tests/test-connection.html</span>
+                </div>
+                <div class="checklist-item">
+                    <span class="icon">5️⃣</span>
+                    <span><strong>Usar:</strong> login.html para registrarte</span>
+                </div>
+            </div>
+            
+            <div class="btn-group">
+                <a href="docs/BACKEND_ISSUES.md" class="btn btn-warning">
+                    ⚠️ Ver Problemas del Backend
+                </a>
+                <a href="tests/test-connection.html" class="btn btn-info">
+                    🔧 Test de Conexión
+                </a>
+                <a href="login.html" class="btn btn-primary">
+                    🚀 Ir a la Aplicación
+                </a>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2>📁 Estructura del Proyecto</h2>
+            <p>El proyecto ha sido reorganizado profesionalmente:</p>
+            <pre style="background: #2d2d2d; color: #f8f8f2; padding: 20px; border-radius: 10px; overflow-x: auto; font-size: 14px;">
+RutinaFamiliar-app/
+├── 📄 index.html, login.html
+├── 📁 css/          → Estilos
+├── 📁 js/           → Scripts
+├── 📁 pages/        → Páginas adicionales
+├── 📁 docs/         → Documentación ⚠️
+├── 📁 tests/        → Tests
+└── 📁 backups/      → Respaldos</pre>
+        </div>
+        
+        <div class="card">
+            <h2>📚 Documentación</h2>
+            <p>Archivos importantes que debes revisar:</p>
+            <ul style="list-style: none; padding: 0;">
+                <li style="padding: 10px 0;">📖 <strong>SUMMARY.md</strong> - Resumen de cambios</li>
+                <li style="padding: 10px 0;">⚠️ <strong>docs/BACKEND_ISSUES.md</strong> - Problemas críticos</li>
+                <li style="padding: 10px 0;">📋 <strong>docs/CHECKLIST.md</strong> - Lista de verificación</li>
+                <li style="padding: 10px 0;">📘 <strong>PROJECT_STRUCTURE.md</strong> - Estructura del proyecto</li>
+            </ul>
+        </div>
+        
+        <div style="text-align: center; margin-top: 40px; padding-top: 30px; border-top: 2px solid #e9ecef;">
+            <p style="color: #666;">by <strong>EDEN SoftWork</strong> 🚀</p>
+            <p style="color: #999; font-size: 14px; margin-top: 10px;">Versión 2.0 - Febrero 2026</p>
+        </div>
+    </div>
+</body>
+</html>
