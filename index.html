@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="CuidaDiario - App de apoyo para cuidadores familiares. Gestiona medicamentos, citas médicas, síntomas y tareas de cuidado de forma simple y segura.">
+    <meta name="keywords" content="cuidadores, app cuidadores, medicamentos, citas médicas, adultos mayores, discapacidad, cuidado familiar">
+    <meta name="author" content="EDEN SoftWork">
+    <meta name="robots" content="index, follow">
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://cuidadiario.edensoftwork.com/">
+    <meta property="og:title" content="CuidaDiario - App para Cuidadores Familiares">
+    <meta property="og:description" content="Gestiona el cuidado de tus seres queridos de forma simple y segura. Medicamentos, citas, síntomas y más.">
+    
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:title" content="CuidaDiario - App para Cuidadores Familiares">
+    <meta property="twitter:description" content="Gestiona el cuidado de tus seres queridos de forma simple y segura.">
+    
+    <title>CuidaDiario - App para Cuidadores Familiares | EDEN SoftWork</title>
+    
+    <link rel="stylesheet" href="styles.css">
+    
+    <!-- Preconnect para optimizar carga de recursos externos -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Header con navegación -->
+    <header class="header">
+        <div class="container header-content">
+            <div class="logo">
+                <h1>CuidaDiario</h1>
+                <span class="logo-subtitle">by EDEN SoftWork</span>
+            </div>
+            <nav class="main-nav">
+                <button class="nav-toggle" id="navToggle" aria-label="Abrir menú">☰</button>
+                <ul class="nav-menu" id="navMenu">
+                    <li><a href="#dashboard" class="nav-link active" data-section="dashboard">Inicio</a></li>
+                    <li><a href="#medicamentos" class="nav-link" data-section="medicamentos">Medicamentos</a></li>
+                    <li><a href="#citas" class="nav-link" data-section="citas">Citas</a></li>
+                    <li><a href="#sintomas" class="nav-link" data-section="sintomas">Síntomas</a></li>
+                    <li><a href="#tareas" class="nav-link" data-section="tareas">Tareas</a></li>
+                    <li><a href="#contactos" class="nav-link" data-section="contactos">Contactos</a></li>
+                    <li><a href="#reportes" class="nav-link" data-section="reportes">Reportes</a></li>
+                    <li><a href="about.html" class="nav-link">Sobre Nosotros</a></li>
+                </ul>
+            </nav>
+            <div class="header-actions">
+                <button class="btn-premium" id="btnPremium">
+                    <span class="premium-icon">⭐</span>
+                    <span id="premiumText">Obtener Premium</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Contenedor principal -->
+    <main class="main-content">
+        <div class="container">
+            <!-- Notificación de estado premium -->
+            <div class="premium-status" id="premiumStatus" style="display: none;">
+                <span class="premium-badge">✓ Usuario Premium</span>
+            </div>
+
+            <!-- Banner de bienvenida (solo primera vez) -->
+            <div class="welcome-banner" id="welcomeBanner" style="display: none;">
+                <h2>¡Bienvenido a CuidaDiario! 👋</h2>
+                <p>Tu asistente personal para el cuidado de tus seres queridos. Comienza agregando medicamentos, citas o tareas.</p>
+                <button class="btn-close-banner" onclick="closeWelcomeBanner()">Entendido</button>
+            </div>
+
+            <!-- Sección: Dashboard -->
+            <section id="dashboard" class="section active">
+                <div class="section-header">
+                    <h2>Panel de Control</h2>
+                    <p class="section-subtitle">Resumen de tus actividades de cuidado</p>
+                </div>
+
+                <!-- Resumen de alertas -->
+                <div class="alerts-container" id="alertsContainer">
+                    <!-- Las alertas se generan dinámicamente -->
+                </div>
+
+                <!-- Tarjetas de resumen -->
+                <div class="dashboard-cards">
+                    <div class="dashboard-card">
+                        <div class="card-icon">💊</div>
+                        <div class="card-content">
+                            <h3>Medicamentos</h3>
+                            <p class="card-number" id="dashMedCount">0</p>
+                            <p class="card-label">Activos</p>
+                        </div>
+                    </div>
+                    <div class="dashboard-card">
+                        <div class="card-icon">📅</div>
+                        <div class="card-content">
+                            <h3>Citas Próximas</h3>
+                            <p class="card-number" id="dashCitasCount">0</p>
+                            <p class="card-label">Esta semana</p>
+                        </div>
+                    </div>
+                    <div class="dashboard-card">
+                        <div class="card-icon">✓</div>
+                        <div class="card-content">
+                            <h3>Tareas Hoy</h3>
+                            <p class="card-number" id="dashTareasCount">0</p>
+                            <p class="card-label">Pendientes</p>
+                        </div>
+                    </div>
+                    <div class="dashboard-card">
+                        <div class="card-icon">📝</div>
+                        <div class="card-content">
+                            <h3>Registros</h3>
+                            <p class="card-number" id="dashRegistrosCount">0</p>
+                            <p class="card-label">Este mes</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Próximas actividades -->
+                <div class="upcoming-section">
+                    <h3>Próximas Actividades</h3>
+                    <div class="upcoming-list" id="upcomingList">
+                        <p class="empty-state">No hay actividades próximas programadas</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Sección: Medicamentos -->
+            <section id="medicamentos" class="section">
+                <div class="section-header">
+                    <h2>Gestión de Medicamentos</h2>
+                    <button class="btn-primary" onclick="openMedicamentoModal()">+ Agregar Medicamento</button>
+                </div>
+
+                <div class="limit-warning" id="medLimitWarning" style="display: none;">
+                    ⚠️ Versión gratuita: máximo 3 medicamentos. <a href="#premium" onclick="showPremiumModal()">Actualiza a Premium</a>
+                </div>
+
+                <div class="medicamentos-list" id="medicamentosList">
+                    <p class="empty-state">No hay medicamentos registrados. Haz clic en "Agregar Medicamento" para comenzar.</p>
+                </div>
+
+                <!-- Historial de administración -->
+                <div class="historial-section" id="medHistorial">
+                    <h3>Historial de Administración</h3>
+                    <div class="historial-list" id="medHistorialList">
+                        <p class="empty-state">No hay registros de administración</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Sección: Citas -->
+            <section id="citas" class="section">
+                <div class="section-header">
+                    <h2>Agenda de Citas Médicas</h2>
+                    <button class="btn-primary" onclick="openCitaModal()">+ Agregar Cita</button>
+                </div>
+
+                <!-- Vista de calendario simple -->
+                <div class="calendar-container">
+                    <div class="calendar-header">
+                        <button class="btn-calendar-nav" onclick="previousMonth()">◀</button>
+                        <h3 id="calendarMonth">Mes Año</h3>
+                        <button class="btn-calendar-nav" onclick="nextMonth()">▶</button>
+                    </div>
+                    <div class="calendar-grid" id="calendarGrid">
+                        <!-- El calendario se genera dinámicamente -->
+                    </div>
+                </div>
+
+                <!-- Lista de citas -->
+                <div class="citas-list-section">
+                    <h3>Todas las Citas</h3>
+                    <div class="filter-buttons">
+                        <button class="filter-btn active" onclick="filterCitas('todas')">Todas</button>
+                        <button class="filter-btn" onclick="filterCitas('proximas')">Próximas</button>
+                        <button class="filter-btn" onclick="filterCitas('pasadas')">Pasadas</button>
+                    </div>
+                    <div class="citas-list" id="citasList">
+                        <p class="empty-state">No hay citas programadas</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Sección: Síntomas -->
+            <section id="sintomas" class="section">
+                <div class="section-header">
+                    <h2>Seguimiento de Síntomas y Salud</h2>
+                    <button class="btn-primary" onclick="openSintomaModal()">+ Registrar Síntoma</button>
+                </div>
+
+                <div class="premium-feature" id="sintomasPremiumWarning" style="display: none;">
+                    <div class="premium-lock">🔒</div>
+                    <p>El seguimiento avanzado de síntomas está disponible en la versión Premium</p>
+                    <button class="btn-premium-small" onclick="showPremiumModal()">Ver Premium</button>
+                </div>
+
+                <!-- Pestañas de seguimiento -->
+                <div class="tabs">
+                    <button class="tab-btn active" onclick="switchSintomaTab('registros')">Registros</button>
+                    <button class="tab-btn" onclick="switchSintomaTab('signos')">Signos Vitales</button>
+                    <button class="tab-btn" onclick="switchSintomaTab('graficas')">Gráficas</button>
+                </div>
+
+                <!-- Contenido de pestañas -->
+                <div class="tab-content">
+                    <div id="sintomas-registros" class="tab-panel active">
+                        <div class="sintomas-list" id="sintomasList">
+                            <p class="empty-state">No hay síntomas registrados</p>
+                        </div>
+                    </div>
+                    <div id="sintomas-signos" class="tab-panel">
+                        <div class="signos-vitales-grid">
+                            <div class="signo-card">
+                                <h4>Presión Arterial</h4>
+                                <div class="signo-value" id="presionValue">--/--</div>
+                                <button class="btn-small" onclick="registrarSigno('presion')">Registrar</button>
+                            </div>
+                            <div class="signo-card">
+                                <h4>Glucosa</h4>
+                                <div class="signo-value" id="glucosaValue">-- mg/dL</div>
+                                <button class="btn-small" onclick="registrarSigno('glucosa')">Registrar</button>
+                            </div>
+                            <div class="signo-card">
+                                <h4>Temperatura</h4>
+                                <div class="signo-value" id="temperaturaValue">-- °C</div>
+                                <button class="btn-small" onclick="registrarSigno('temperatura')">Registrar</button>
+                            </div>
+                            <div class="signo-card">
+                                <h4>Peso</h4>
+                                <div class="signo-value" id="pesoValue">-- kg</div>
+                                <button class="btn-small" onclick="registrarSigno('peso')">Registrar</button>
+                            </div>
+                        </div>
+                        <div class="signos-historial" id="signosHistorial">
+                            <h4>Historial de Signos Vitales</h4>
+                            <div id="signosHistorialList">
+                                <p class="empty-state">No hay signos vitales registrados</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="sintomas-graficas" class="tab-panel">
+                        <div class="chart-container" id="chartContainer">
+                            <p class="info-message">Las gráficas se generarán cuando tengas suficientes registros de signos vitales</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Sección: Tareas -->
+            <section id="tareas" class="section">
+                <div class="section-header">
+                    <h2>Gestión de Tareas y Rutinas</h2>
+                    <button class="btn-primary" onclick="openTareaModal()">+ Agregar Tarea</button>
+                </div>
+
+                <div class="limit-warning" id="tareasLimitWarning" style="display: none;">
+                    ⚠️ Versión gratuita: máximo 3 tareas activas. <a href="#premium" onclick="showPremiumModal()">Actualiza a Premium</a>
+                </div>
+
+                <!-- Filtros de tareas -->
+                <div class="filter-buttons">
+                    <button class="filter-btn active" onclick="filterTareas('todas')">Todas</button>
+                    <button class="filter-btn" onclick="filterTareas('hoy')">Hoy</button>
+                    <button class="filter-btn" onclick="filterTareas('pendientes')">Pendientes</button>
+                    <button class="filter-btn" onclick="filterTareas('completadas')">Completadas</button>
+                </div>
+
+                <!-- Lista de tareas -->
+                <div class="tareas-list" id="tareasList">
+                    <p class="empty-state">No hay tareas registradas</p>
+                </div>
+            </section>
+
+            <!-- Sección: Contactos -->
+            <section id="contactos" class="section">
+                <div class="section-header">
+                    <h2>Contactos de Emergencia y Profesionales</h2>
+                    <button class="btn-primary" onclick="openContactoModal()">+ Agregar Contacto</button>
+                </div>
+
+                <div class="premium-feature" id="contactosPremiumWarning" style="display: none;">
+                    <div class="premium-lock">🔒</div>
+                    <p>La agenda de contactos ampliada está disponible en la versión Premium (máximo 3 contactos en versión gratuita)</p>
+                    <button class="btn-premium-small" onclick="showPremiumModal()">Ver Premium</button>
+                </div>
+
+                <!-- Categorías de contactos -->
+                <div class="tabs">
+                    <button class="tab-btn active" onclick="switchContactoTab('todos')">Todos</button>
+                    <button class="tab-btn" onclick="switchContactoTab('medicos')">Médicos</button>
+                    <button class="tab-btn" onclick="switchContactoTab('emergencia')">Emergencia</button>
+                    <button class="tab-btn" onclick="switchContactoTab('familiares')">Familiares</button>
+                </div>
+
+                <!-- Lista de contactos -->
+                <div class="contactos-list" id="contactosList">
+                    <p class="empty-state">No hay contactos registrados</p>
+                </div>
+            </section>
+
+            <!-- Sección: Reportes -->
+            <section id="reportes" class="section">
+                <div class="section-header">
+                    <h2>Historial y Reportes</h2>
+                </div>
+
+                <div class="premium-feature" id="reportesPremiumWarning" style="display: none;">
+                    <div class="premium-lock">🔒</div>
+                    <p>Los reportes y exportación de datos están disponibles en la versión Premium</p>
+                    <button class="btn-premium-small" onclick="showPremiumModal()">Ver Premium</button>
+                </div>
+
+                <div id="reportesContent">
+                    <!-- Opciones de reporte -->
+                    <div class="reportes-options">
+                        <div class="reporte-card">
+                            <h3>📊 Reporte Completo</h3>
+                            <p>Genera un informe completo de todas las actividades</p>
+                            <div class="date-range">
+                                <label>Desde: <input type="date" id="reporteDesde"></label>
+                                <label>Hasta: <input type="date" id="reporteHasta"></label>
+                            </div>
+                            <button class="btn-secondary" onclick="generarReporteCompleto()">Generar Reporte</button>
+                        </div>
+
+                        <div class="reporte-card">
+                            <h3>💊 Reporte de Medicamentos</h3>
+                            <p>Historial de administración de medicamentos</p>
+                            <button class="btn-secondary" onclick="generarReporteMedicamentos()">Generar</button>
+                        </div>
+
+                        <div class="reporte-card">
+                            <h3>🏥 Reporte Médico</h3>
+                            <p>Síntomas, signos vitales y citas médicas</p>
+                            <button class="btn-secondary" onclick="generarReporteMedico()">Generar</button>
+                        </div>
+                    </div>
+
+                    <!-- Exportar/Importar datos -->
+                    <div class="data-management">
+                        <h3>Gestión de Datos</h3>
+                        <div class="data-actions">
+                            <div class="data-action-card">
+                                <h4>📥 Exportar Datos</h4>
+                                <p>Descarga todos tus datos en formato JSON</p>
+                                <button class="btn-secondary" onclick="exportarDatos()">Exportar</button>
+                            </div>
+                            <div class="data-action-card">
+                                <h4>📤 Importar Datos</h4>
+                                <p>Importa datos desde un archivo JSON</p>
+                                <input type="file" id="importFile" accept=".json" style="display:none" onchange="importarDatos(event)">
+                                <button class="btn-secondary" onclick="document.getElementById('importFile').click()">Importar</button>
+                            </div>
+                            <div class="data-action-card warning">
+                                <h4>🗑️ Eliminar Todos los Datos</h4>
+                                <p>Borra permanentemente toda la información</p>
+                                <button class="btn-danger" onclick="confirmarBorrarDatos()">Eliminar Todo</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <h3>CuidaDiario</h3>
+                    <p>Desarrollado con ❤️ por <strong>EDEN SoftWork</strong></p>
+                    <p class="footer-tagline">Software a medida para hacer tu vida más fácil</p>
+                </div>
+                <div class="footer-links">
+                    <h4>Enlaces</h4>
+                    <ul>
+                        <li><a href="about.html">Sobre Nosotros</a></li>
+                        <li><a href="privacy.html">Política de Privacidad</a></li>
+                        <li><a href="terms.html">Términos de Uso</a></li>
+                        <li><a href="mailto:contacto@edensoftwork.com">Contacto</a></li>
+                    </ul>
+                </div>
+                <div class="footer-info">
+                    <h4>Información</h4>
+                    <p>Tus datos se almacenan de forma segura solo en tu dispositivo.</p>
+                    <p>Versión: 1.0.0</p>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2026 EDEN SoftWork. Todos los derechos reservados.</p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Modal: Medicamento -->
+    <div id="medicamentoModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="medicamentoModalTitle">Agregar Medicamento</h3>
+                <button class="modal-close" onclick="closeMedicamentoModal()">&times;</button>
+            </div>
+            <form id="medicamentoForm" onsubmit="saveMedicamento(event)">
+                <input type="hidden" id="medId">
+                <div class="form-group">
+                    <label for="medNombre">Nombre del medicamento *</label>
+                    <input type="text" id="medNombre" required>
+                </div>
+                <div class="form-group">
+                    <label for="medDosis">Dosis *</label>
+                    <input type="text" id="medDosis" placeholder="Ej: 500mg, 1 comprimido" required>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="medFrecuencia">Frecuencia *</label>
+                        <select id="medFrecuencia" required>
+                            <option value="">Selecciona...</option>
+                            <option value="cada-4h">Cada 4 horas</option>
+                            <option value="cada-6h">Cada 6 horas</option>
+                            <option value="cada-8h">Cada 8 horas</option>
+                            <option value="cada-12h">Cada 12 horas</option>
+                            <option value="diaria">Diaria</option>
+                            <option value="custom">Horarios personalizados</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="medHoraInicio">Hora de inicio</label>
+                        <input type="time" id="medHoraInicio">
+                    </div>
+                </div>
+                <div class="form-group" id="customHorariosGroup" style="display: none;">
+                    <label>Horarios personalizados (separados por comas)</label>
+                    <input type="text" id="medHorariosCustom" placeholder="Ej: 08:00, 14:00, 20:00">
+                </div>
+                <div class="form-group">
+                    <label for="medNotas">Notas adicionales</label>
+                    <textarea id="medNotas" rows="3" placeholder="Instrucciones especiales, tomar con comida, etc."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="medRecordatorio">
+                        Activar recordatorios automáticos
+                    </label>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" onclick="closeMedicamentoModal()">Cancelar</button>
+                    <button type="submit" class="btn-primary">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Cita -->
+    <div id="citaModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="citaModalTitle">Agregar Cita</h3>
+                <button class="modal-close" onclick="closeCitaModal()">&times;</button>
+            </div>
+            <form id="citaForm" onsubmit="saveCita(event)">
+                <input type="hidden" id="citaId">
+                <div class="form-group">
+                    <label for="citaTipo">Tipo de cita *</label>
+                    <select id="citaTipo" required>
+                        <option value="">Selecciona...</option>
+                        <option value="consulta">Consulta médica</option>
+                        <option value="estudio">Estudio/Análisis</option>
+                        <option value="terapia">Terapia/Rehabilitación</option>
+                        <option value="control">Control de rutina</option>
+                        <option value="otro">Otro</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="citaTitulo">Título/Descripción *</label>
+                    <input type="text" id="citaTitulo" required>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="citaFecha">Fecha *</label>
+                        <input type="date" id="citaFecha" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="citaHora">Hora *</label>
+                        <input type="time" id="citaHora" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="citaLugar">Lugar/Institución</label>
+                    <input type="text" id="citaLugar" placeholder="Nombre del hospital, clínica, etc.">
+                </div>
+                <div class="form-group">
+                    <label for="citaProfesional">Profesional</label>
+                    <input type="text" id="citaProfesional" placeholder="Nombre del médico/profesional">
+                </div>
+                <div class="form-group">
+                    <label for="citaNotas">Notas</label>
+                    <textarea id="citaNotas" rows="3" placeholder="Preparación necesaria, documentos a llevar, etc."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="citaRecordatorio">Recordar con anticipación</label>
+                    <select id="citaRecordatorio">
+                        <option value="0">No recordar</option>
+                        <option value="30">30 minutos antes</option>
+                        <option value="60">1 hora antes</option>
+                        <option value="1440">1 día antes</option>
+                        <option value="2880">2 días antes</option>
+                    </select>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" onclick="closeCitaModal()">Cancelar</button>
+                    <button type="submit" class="btn-primary">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Síntoma -->
+    <div id="sintomaModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Registrar Síntoma</h3>
+                <button class="modal-close" onclick="closeSintomaModal()">&times;</button>
+            </div>
+            <form id="sintomaForm" onsubmit="saveSintoma(event)">
+                <div class="form-group">
+                    <label for="sintomaFecha">Fecha y hora *</label>
+                    <input type="datetime-local" id="sintomaFecha" required>
+                </div>
+                <div class="form-group">
+                    <label for="sintomaTipo">Tipo de síntoma *</label>
+                    <input type="text" id="sintomaTipo" placeholder="Ej: Dolor de cabeza, mareo, etc." required>
+                </div>
+                <div class="form-group">
+                    <label for="sintomaIntensidad">Intensidad (1-10)</label>
+                    <input type="range" id="sintomaIntensidad" min="1" max="10" value="5">
+                    <div class="intensity-labels">
+                        <span>Leve (1)</span>
+                        <span id="intensidadValue">5</span>
+                        <span>Severo (10)</span>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="sintomaEstadoAnimo">Estado de ánimo</label>
+                    <select id="sintomaEstadoAnimo">
+                        <option value="">No especificar</option>
+                        <option value="excelente">😊 Excelente</option>
+                        <option value="bien">🙂 Bien</option>
+                        <option value="regular">😐 Regular</option>
+                        <option value="mal">😟 Mal</option>
+                        <option value="muy-mal">😢 Muy mal</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="sintomaDescripcion">Descripción</label>
+                    <textarea id="sintomaDescripcion" rows="3" placeholder="Describe el síntoma con más detalle..."></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" onclick="closeSintomaModal()">Cancelar</button>
+                    <button type="submit" class="btn-primary">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Signo Vital -->
+    <div id="signoModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="signoModalTitle">Registrar Signo Vital</h3>
+                <button class="modal-close" onclick="closeSignoModal()">&times;</button>
+            </div>
+            <form id="signoForm" onsubmit="saveSigno(event)">
+                <input type="hidden" id="signoTipo">
+                <div class="form-group">
+                    <label for="signoFecha">Fecha y hora *</label>
+                    <input type="datetime-local" id="signoFecha" required>
+                </div>
+                <div id="signoInputs">
+                    <!-- Los inputs se generan dinámicamente según el tipo -->
+                </div>
+                <div class="form-group">
+                    <label for="signoNotas">Notas</label>
+                    <textarea id="signoNotas" rows="2"></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" onclick="closeSignoModal()">Cancelar</button>
+                    <button type="submit" class="btn-primary">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Tarea -->
+    <div id="tareaModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="tareaModalTitle">Agregar Tarea</h3>
+                <button class="modal-close" onclick="closeTareaModal()">&times;</button>
+            </div>
+            <form id="tareaForm" onsubmit="saveTarea(event)">
+                <input type="hidden" id="tareaId">
+                <div class="form-group">
+                    <label for="tareaTitulo">Título de la tarea *</label>
+                    <input type="text" id="tareaTitulo" required>
+                </div>
+                <div class="form-group">
+                    <label for="tareaCategoria">Categoría *</label>
+                    <select id="tareaCategoria" required>
+                        <option value="">Selecciona...</option>
+                        <option value="alimentacion">Alimentación</option>
+                        <option value="higiene">Higiene personal</option>
+                        <option value="ejercicio">Ejercicio/Movilidad</option>
+                        <option value="medicacion">Medicación</option>
+                        <option value="social">Actividad social</option>
+                        <option value="otro">Otro</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="tareaFrecuencia">Frecuencia *</label>
+                    <select id="tareaFrecuencia" required onchange="updateTareaFechas()">
+                        <option value="unica">Única vez</option>
+                        <option value="diaria">Diaria</option>
+                        <option value="semanal">Semanal</option>
+                        <option value="mensual">Mensual</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="tareaFecha">Fecha *</label>
+                        <input type="date" id="tareaFecha" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="tareaHora">Hora</label>
+                        <input type="time" id="tareaHora">
+                    </div>
+                </div>
+                <div class="form-group" id="tareaRecurrenteGroup" style="display: none;">
+                    <label for="tareaHastaFecha">Repetir hasta</label>
+                    <input type="date" id="tareaHastaFecha">
+                </div>
+                <div class="form-group">
+                    <label for="tareaDescripcion">Descripción</label>
+                    <textarea id="tareaDescripcion" rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="tareaRecordatorio">
+                        Activar recordatorio
+                    </label>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" onclick="closeTareaModal()">Cancelar</button>
+                    <button type="submit" class="btn-primary">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Contacto -->
+    <div id="contactoModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="contactoModalTitle">Agregar Contacto</h3>
+                <button class="modal-close" onclick="closeContactoModal()">&times;</button>
+            </div>
+            <form id="contactoForm" onsubmit="saveContacto(event)">
+                <input type="hidden" id="contactoId">
+                <div class="form-group">
+                    <label for="contactoNombre">Nombre completo *</label>
+                    <input type="text" id="contactoNombre" required>
+                </div>
+                <div class="form-group">
+                    <label for="contactoCategoria">Categoría *</label>
+                    <select id="contactoCategoria" required>
+                        <option value="">Selecciona...</option>
+                        <option value="medico">Médico</option>
+                        <option value="emergencia">Emergencia</option>
+                        <option value="familiar">Familiar</option>
+                        <option value="farmacia">Farmacia</option>
+                        <option value="otro">Otro</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="contactoEspecialidad">Especialidad/Relación</label>
+                    <input type="text" id="contactoEspecialidad" placeholder="Ej: Cardiólogo, Hijo, etc.">
+                </div>
+                <div class="form-group">
+                    <label for="contactoTelefono">Teléfono *</label>
+                    <input type="tel" id="contactoTelefono" required>
+                </div>
+                <div class="form-group">
+                    <label for="contactoEmail">Email</label>
+                    <input type="email" id="contactoEmail">
+                </div>
+                <div class="form-group">
+                    <label for="contactoDireccion">Dirección</label>
+                    <input type="text" id="contactoDireccion">
+                </div>
+                <div class="form-group">
+                    <label for="contactoNotas">Notas</label>
+                    <textarea id="contactoNotas" rows="3" placeholder="Horarios de atención, indicaciones, etc."></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" onclick="closeContactoModal()">Cancelar</button>
+                    <button type="submit" class="btn-primary">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Premium -->
+    <div id="premiumModal" class="modal">
+        <div class="modal-content modal-premium">
+            <div class="modal-header">
+                <h3>Actualiza a CuidaDiario Premium ⭐</h3>
+                <button class="modal-close" onclick="closePremiumModal()">&times;</button>
+            </div>
+            <div class="premium-content">
+                <div class="premium-benefits">
+                    <h4>Beneficios Premium:</h4>
+                    <ul>
+                        <li>✓ Medicamentos y tareas <strong>ilimitados</strong></li>
+                        <li>✓ Citas médicas sin límites</li>
+                        <li>✓ Historial completo y reportes exportables</li>
+                        <li>✓ Seguimiento avanzado de síntomas y signos vitales</li>
+                        <li>✓ Agenda de contactos ampliada</li>
+                        <li>✓ Exportación e importación de datos</li>
+                        <li>✓ Gráficas y análisis de tendencias</li>
+                        <li>✓ Soporte prioritario</li>
+                    </ul>
+                </div>
+                <div class="premium-pricing">
+                    <div class="price-card">
+                        <h4>🇦🇷 Argentina</h4>
+                        <div class="price">$29.999 ARS</div>
+                        <p class="price-detail">Pago único - Acceso de por vida</p>
+                        <button class="btn-payment" onclick="procesarPago('mercadopago', 'ARS', 29999)">
+                            Pagar con MercadoPago
+                        </button>
+                    </div>
+                    <div class="price-card">
+                        <h4>🌎 Internacional</h4>
+                        <div class="price">$19.99 USD</div>
+                        <p class="price-detail">Pago único - Acceso de por vida</p>
+                        <button class="btn-payment" onclick="procesarPago('paypal', 'USD', 19.99)">
+                            Pagar con PayPal
+                        </button>
+                        <button class="btn-payment btn-payment-alt" onclick="procesarPago('stripe', 'USD', 19.99)">
+                            Pagar con Tarjeta (Stripe)
+                        </button>
+                    </div>
+                </div>
+                <p class="premium-guarantee">
+                    🔒 Pago seguro | 💯 Satisfacción garantizada | 📧 Soporte incluido
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="storage.js"></script>
+    <script src="notifications.js"></script>
+    <script src="payments.js"></script>
+    <script src="reports.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
