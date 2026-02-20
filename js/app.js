@@ -116,13 +116,14 @@ async function loadDashboard() {
 }
 
 async function updateDashboardStats() {
-    const stats = Storage.getStats();
+    const stats = await Storage.getStats();
     const today = new Date().toISOString().split('T')[0];
     
     document.getElementById('dashMedCount').textContent = stats.medicamentos;
     
     // Citas próximas (esta semana)
-    const citasProximas = Storage.getCitas().filter(c => {
+    const citas = await Storage.getCitas();
+    const citasProximas = citas.filter(c => {
         const citaDate = new Date(c.fecha);
         const weekFromNow = new Date();
         weekFromNow.setDate(weekFromNow.getDate() + 7);
@@ -131,16 +132,18 @@ async function updateDashboardStats() {
     document.getElementById('dashCitasCount').textContent = citasProximas.length;
     
     // Tareas de hoy pendientes
-    const tareasPendientes = Storage.getTareas().filter(t => 
+    const tareas = await Storage.getTareas();
+    const tareasPendientes = tareas.filter(t => 
         !t.completada && t.fecha === today
     );
     document.getElementById('dashTareasCount').textContent = tareasPendientes.length;
     
     // Registros este mes
     const thisMonth = new Date().toISOString().substring(0, 7);
+    const sintomas = await Storage.getSintomas();
     const registrosMes = Storage.getHistorialMedicamentos().filter(h => 
         h.fecha.startsWith(thisMonth)
-    ).length + Storage.getSintomas().filter(s => 
+    ).length + sintomas.filter(s => 
         s.fecha.startsWith(thisMonth)
     ).length;
     document.getElementById('dashRegistrosCount').textContent = registrosMes;
@@ -148,7 +151,14 @@ async function updateDashboardStats() {
 
 async function updateAlertsContainer() {
     const container = document.getElementById('alertsContainer');
-    const alerts = Notifications.getUrgentAlerts();
+    
+    // Verificar que Notifications esté disponible
+    if (typeof window.Notifications === 'undefined' || !window.Notifications) {
+        container.innerHTML = '';
+        return;
+    }
+    
+    const alerts = await window.Notifications.getUrgentAlerts();
     
     if (alerts.length === 0) {
         container.innerHTML = '';
@@ -174,7 +184,8 @@ async function updateUpcomingActivities() {
     tomorrow.setDate(tomorrow.getDate() + 1);
     
     // Agregar citas próximas
-    await Storage.getCitas().forEach(cita => {
+    const citas = await Storage.getCitas();
+    citas.forEach(cita => {
         const citaDate = new Date(`${cita.fecha}T${cita.hora}`);
         if (citaDate > now && citaDate <= tomorrow) {
             activities.push({
@@ -189,7 +200,8 @@ async function updateUpcomingActivities() {
     
     // Agregar tareas de hoy
     const today = now.toISOString().split('T')[0];
-    await Storage.getTareas().filter(t => !t.completada && t.fecha === today).forEach(tarea => {
+    const tareas = await Storage.getTareas();
+    tareas.filter(t => !t.completada && t.fecha === today).forEach(tarea => {
         activities.push({
             time: tarea.hora || '00:00',
             title: tarea.titulo,
@@ -341,7 +353,8 @@ function closeMedicamentoModal() {
 }
 
 async function editMedicamento(id) {
-    const medicamento = Storage.getMedicamentos().find(m => m.id === id);
+    const medicamentos = await Storage.getMedicamentos();
+    const medicamento = medicamentos.find(m => m.id === id);
     if (!medicamento) return;
     
     editingMedicamentoId = id;
@@ -400,7 +413,8 @@ async function saveMedicamento(event) {
 }
 
 async function registrarTomaMedicamento(id) {
-    const medicamento = Storage.getMedicamentos().find(m => m.id === id);
+    const medicamentos = await Storage.getMedicamentos();
+    const medicamento = medicamentos.find(m => m.id === id);
     if (!medicamento) return;
     
     Storage.addHistorialMedicamento({
@@ -607,7 +621,8 @@ function closeCitaModal() {
 }
 
 async function editCita(id) {
-    const cita = Storage.getCitas().find(c => c.id === id);
+    const citas = await Storage.getCitas();
+    const cita = citas.find(c => c.id === id);
     if (!cita) return;
     
     editingCitaId = id;
@@ -678,7 +693,8 @@ async function loadSintomas() {
 }
 
 async function renderSintomasList() {
-    const sintomas = Storage.getSintomas().slice(-30).reverse();
+    const sintomas = await Storage.getSintomas();
+    const sintomasRecientes = sintomas.slice(-30).reverse();
     const container = document.getElementById('sintomasList');
     
     if (sintomas.length === 0) {
@@ -686,13 +702,13 @@ async function renderSintomasList() {
         return;
     }
     
-    container.innerHTML = sintomas.map(s => {
+    container.innerHTML = sintomasRecientes.map(s => {
         const intensidadClass = s.intensidad > 7 ? 'badge-urgent' : s.intensidad > 4 ? 'badge-pending' : 'badge-active';
         return `
             <div class="item-card">
                 <div class="item-header">
                     <div>
-                        <h3 class="item-title">${s.tipo}</h3>
+                        <h3 class="item-title">${s.tipo || 'Síntoma sin especificar'}</h3>
                         <p class="item-subtitle">${formatDateTime(s.fecha)}</p>
                     </div>
                     <div class="item-actions">
@@ -1087,7 +1103,8 @@ function closeTareaModal() {
 }
 
 async function editTarea(id) {
-    const tarea = Storage.getTareas().find(t => t.id === id);
+    const tareas = await Storage.getTareas();
+    const tarea = tareas.find(t => t.id === id);
     if (!tarea) return;
     
     editingTareaId = id;
@@ -1118,7 +1135,8 @@ async function deleteTarea(id) {
 }
 
 async function toggleTareaCompletada(id) {
-    const tarea = Storage.getTareas().find(t => t.id === id);
+    const tareas = await Storage.getTareas();
+    const tarea = tareas.find(t => t.id === id);
     if (tarea) {
         await Storage.updateTarea(id, { completada: !tarea.completada });
         await loadTareas();
@@ -1140,12 +1158,14 @@ function updateTareaFechas() {
 async function saveTarea(event) {
     event.preventDefault();
     
+    const hora = document.getElementById('tareaHora').value;
+    
     const tarea = {
         titulo: document.getElementById('tareaTitulo').value,
         categoria: document.getElementById('tareaCategoria').value,
         frecuencia: document.getElementById('tareaFrecuencia').value,
         fecha: document.getElementById('tareaFecha').value,
-        hora: document.getElementById('tareaHora').value,
+        hora: hora || null,
         descripcion: document.getElementById('tareaDescripcion').value,
         recordatorio: document.getElementById('tareaRecordatorio').checked
     };
@@ -1275,7 +1295,8 @@ function closeContactoModal() {
 }
 
 async function editContacto(id) {
-    const contacto = Storage.getContactos().find(c => c.id === id);
+    const contactos = await Storage.getContactos();
+    const contacto = contactos.find(c => c.id === id);
     if (!contacto) return;
     
     editingContactoId = id;

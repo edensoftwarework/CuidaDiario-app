@@ -288,12 +288,12 @@ const Notifications = {
      * Verificar si hay alertas urgentes para el dashboard
      * @returns {Array} - Array de alertas
      */
-    getUrgentAlerts() {
+    async getUrgentAlerts() {
         const alerts = [];
         const now = new Date();
 
         // Medicamentos próximos (próxima hora)
-        const medicamentos = Storage.getMedicamentos();
+        const medicamentos = await Storage.getMedicamentos();
         const nextHour = new Date(now.getTime() + 60 * 60000);
         
         medicamentos.forEach(med => {
@@ -318,9 +318,10 @@ const Notifications = {
 
         // Citas de hoy
         const today = now.toISOString().split('T')[0];
-        const citas = Storage.getCitas().filter(c => c.fecha === today);
+        const citas = await Storage.getCitas();
+        const citasHoy = citas.filter(c => c.fecha === today);
         
-        citas.forEach(cita => {
+        citasHoy.forEach(cita => {
             const citaTime = new Date(`${cita.fecha}T${cita.hora}`);
             if (citaTime > now) {
                 alerts.push({
@@ -334,7 +335,8 @@ const Notifications = {
         });
 
         // Tareas pendientes de hoy
-        const tareasPendientes = Storage.getTareas().filter(t => 
+        const todasTareas = await Storage.getTareas();
+        const tareasPendientes = todasTareas.filter(t => 
             !t.completada && t.fecha === today
         );
 

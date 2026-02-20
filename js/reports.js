@@ -285,13 +285,13 @@ const Reports = {
     /**
      * Exportar datos como JSON
      */
-    exportarDatos() {
+    async exportarDatos() {
         if (!Storage.getPremiumStatus()) {
             showPremiumModal();
             return;
         }
 
-        const data = Storage.exportAllData();
+        const data = await Storage.exportData();
         const json = JSON.stringify(data, null, 2);
         const blob = new Blob([json], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
