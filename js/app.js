@@ -111,13 +111,14 @@ async function navigateToSection(sectionId) {
 // ========== DASHBOARD ==========
 async function loadDashboard() {
     await updateDashboardStats();
-    updateAlertsContainer();
-    updateUpcomingActivities();
+    await updateAlertsContainer();
+    await updateUpcomingActivities();
 }
 
 async function updateDashboardStats() {
     const stats = await Storage.getStats();
-    const today = new Date().toISOString().split('T')[0];
+    const _now = new Date();
+    const today = `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}-${String(_now.getDate()).padStart(2,'0')}`;
     
     document.getElementById('dashMedCount').textContent = stats.medicamentos;
     
@@ -134,17 +135,18 @@ async function updateDashboardStats() {
     // Tareas de hoy pendientes
     const tareas = await Storage.getTareas();
     const tareasPendientes = tareas.filter(t => 
-        !t.completada && t.fecha === today
+        !t.completada && (t.fecha || '').substring(0, 10) === today
     );
     document.getElementById('dashTareasCount').textContent = tareasPendientes.length;
     
     // Registros este mes
     const thisMonth = new Date().toISOString().substring(0, 7);
     const sintomas = await Storage.getSintomas();
-    const registrosMes = Storage.getHistorialMedicamentos().filter(h => 
-        h.fecha.startsWith(thisMonth)
+    const historialData = await Storage.getHistorialMedicamentos();
+    const registrosMes = historialData.filter(h => 
+        (h.fecha || '').startsWith(thisMonth)
     ).length + sintomas.filter(s => 
-        s.fecha.startsWith(thisMonth)
+        (s.fecha || '').startsWith(thisMonth)
     ).length;
     document.getElementById('dashRegistrosCount').textContent = registrosMes;
 }
@@ -178,56 +180,72 @@ async function updateAlertsContainer() {
 
 async function updateUpcomingActivities() {
     const list = document.getElementById('upcomingList');
-    const activities = [];
-    const now = new Date();
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    
-    // Agregar citas próximas
-    const citas = await Storage.getCitas();
-    citas.forEach(cita => {
-        const citaDate = new Date(`${cita.fecha}T${cita.hora}`);
-        if (citaDate > now && citaDate <= tomorrow) {
-            activities.push({
-                time: cita.hora,
-                title: cita.titulo,
-                subtitle: `Cita - ${cita.lugar || 'Sin ubicación'}`,
-                type: 'cita',
-                date: citaDate
-            });
-        }
-    });
-    
-    // Agregar tareas de hoy
-    const today = now.toISOString().split('T')[0];
-    const tareas = await Storage.getTareas();
-    tareas.filter(t => !t.completada && t.fecha === today).forEach(tarea => {
-        activities.push({
-            time: tarea.hora || '00:00',
-            title: tarea.titulo,
-            subtitle: `Tarea - ${tarea.categoria}`,
-            type: 'tarea',
-            date: new Date(`${tarea.fecha}T${tarea.hora || '00:00'}`)
+    try {
+        const activities = [];
+        const now = new Date();
+        const weekFromNow = new Date(now);
+        weekFromNow.setDate(weekFromNow.getDate() + 7);
+        
+        // Agregar citas próximas (próximos 7 días)
+        const citas = await Storage.getCitas();
+        citas.forEach(cita => {
+            const fechaPart = String(cita.fecha || '').substring(0, 10);
+            if (!fechaPart) return;
+            // Si no tiene hora, usar 23:59 para que muestre todo el día
+            const horaPart = cita.hora ? String(cita.hora).substring(0, 5) : '23:59';
+            const citaDate = new Date(`${fechaPart}T${horaPart}`);
+            if (isNaN(citaDate)) return;
+            if (citaDate > now && citaDate <= weekFromNow) {
+                activities.push({
+                    time: cita.hora ? String(cita.hora).substring(0, 5) : 'Sin hora',
+                    title: cita.titulo,
+                    subtitle: `Cita - ${cita.lugar || 'Sin ubicación'}`,
+                    type: 'cita',
+                    date: citaDate
+                });
+            }
         });
-    });
-    
-    // Ordenar por hora
-    activities.sort((a, b) => a.date - b.date);
-    
-    if (activities.length === 0) {
-        list.innerHTML = '<p class="empty-state">No hay actividades próximas programadas</p>';
-        return;
-    }
-    
-    list.innerHTML = activities.map(act => `
-        <div class="upcoming-item">
-            <div class="upcoming-time">${act.time}</div>
-            <div class="upcoming-content">
-                <h4>${act.title}</h4>
-                <p>${act.subtitle}</p>
+        
+        // Agregar tareas próximas (próximos 7 días)
+        const _t = now;
+        const todayLocal = `${_t.getFullYear()}-${String(_t.getMonth()+1).padStart(2,'0')}-${String(_t.getDate()).padStart(2,'0')}`;
+        const tareasAll = await Storage.getTareas();
+        tareasAll.filter(t => {
+            const tf = String(t.fecha || '').substring(0, 10);
+            return !t.completada && tf >= todayLocal && new Date(`${tf}T00:00`) <= weekFromNow;
+        }).forEach(tarea => {
+            const tf = String(tarea.fecha || '').substring(0, 10);
+            const th = tarea.hora ? String(tarea.hora).substring(0, 5) : '00:00';
+            activities.push({
+                time: tarea.hora ? th : 'Sin hora',
+                title: tarea.titulo,
+                subtitle: `Tarea - ${tarea.categoria || 'General'}`,
+                type: 'tarea',
+                date: new Date(`${tf}T${th}`)
+            });
+        });
+        
+        // Ordenar por fecha y hora
+        activities.sort((a, b) => a.date - b.date);
+        
+        if (activities.length === 0) {
+            list.innerHTML = '<p class="empty-state">No hay actividades próximas programadas</p>';
+            return;
+        }
+        
+        list.innerHTML = activities.map(act => `
+            <div class="upcoming-item">
+                <div class="upcoming-time">${act.time}</div>
+                <div class="upcoming-content">
+                    <h4>${act.title}</h4>
+                    <p>${act.subtitle}</p>
+                </div>
             </div>
-        </div>
-    `).join('');
+        `).join('');
+    } catch (err) {
+        console.error('Error cargando actividades próximas:', err);
+        list.innerHTML = '<p class="empty-state">No hay actividades próximas programadas</p>';
+    }
 }
 
 // ========== MEDICAMENTOS ==========
@@ -269,10 +287,10 @@ async function loadMedicamentos() {
                     <span class="detail-icon">⏰</span>
                     <span>${formatFrecuenciaMed(med)}</span>
                 </div>
-                ${med.horaInicio ? `
+                ${(med.hora_inicio || med.horaInicio) ? `
                 <div class="item-detail">
                     <span class="detail-icon">🕐</span>
-                    <span>Inicio: ${med.horaInicio}</span>
+                    <span>Inicio: ${med.hora_inicio || med.horaInicio}</span>
                 </div>
                 ` : ''}
                 ${med.notas ? `
@@ -291,17 +309,18 @@ async function loadMedicamentos() {
     `).join('');
     
     // Cargar historial
-    loadHistorialMedicamentos();
+    await loadHistorialMedicamentos();
 }
 
-function loadHistorialMedicamentos() {
+async function loadHistorialMedicamentos() {
     if (!Storage.getPremiumStatus()) {
         document.getElementById('medHistorial').style.display = 'none';
         return;
     }
     
     document.getElementById('medHistorial').style.display = 'block';
-    const historial = Storage.getHistorialMedicamentos().slice(-50).reverse();
+    const historialData = await Storage.getHistorialMedicamentos();
+    const historial = historialData.slice(0, 50);
     const container = document.getElementById('medHistorialList');
     
     if (historial.length === 0) {
@@ -312,7 +331,7 @@ function loadHistorialMedicamentos() {
     container.innerHTML = historial.map(h => `
         <div class="historial-item">
             <div class="historial-info">
-                <strong>${h.medicamentoNombre}</strong> - ${h.dosis}
+                <strong>${h.medicamento_nombre || h.medicamentoNombre || '—'}</strong> - ${h.dosis || ''}
                 ${h.notas ? `<br><small>${h.notas}</small>` : ''}
             </div>
             <div class="historial-fecha">${formatDate(h.fecha)}</div>
@@ -354,7 +373,7 @@ function closeMedicamentoModal() {
 
 async function editMedicamento(id) {
     const medicamentos = await Storage.getMedicamentos();
-    const medicamento = medicamentos.find(m => m.id === id);
+    const medicamento = medicamentos.find(m => String(m.id) === String(id));
     if (!medicamento) return;
     
     editingMedicamentoId = id;
@@ -363,13 +382,13 @@ async function editMedicamento(id) {
     document.getElementById('medNombre').value = medicamento.nombre;
     document.getElementById('medDosis').value = medicamento.dosis;
     document.getElementById('medFrecuencia').value = medicamento.frecuencia;
-    document.getElementById('medHoraInicio').value = medicamento.horaInicio || '';
+    document.getElementById('medHoraInicio').value = medicamento.hora_inicio || medicamento.horaInicio || '';
     document.getElementById('medNotas').value = medicamento.notas || '';
     document.getElementById('medRecordatorio').checked = medicamento.recordatorio || false;
     
     if (medicamento.frecuencia === 'custom') {
         document.getElementById('customHorariosGroup').style.display = 'block';
-        document.getElementById('medHorariosCustom').value = medicamento.horariosCustom || '';
+        document.getElementById('medHorariosCustom').value = medicamento.horarios_custom || medicamento.horariosCustom || '';
     }
     
     document.getElementById('medicamentoModal').classList.add('active');
@@ -414,10 +433,10 @@ async function saveMedicamento(event) {
 
 async function registrarTomaMedicamento(id) {
     const medicamentos = await Storage.getMedicamentos();
-    const medicamento = medicamentos.find(m => m.id === id);
+    const medicamento = medicamentos.find(m => String(m.id) === String(id));
     if (!medicamento) return;
     
-    Storage.addHistorialMedicamento({
+    await Storage.addHistorialMedicamento({
         medicamentoId: id,
         medicamentoNombre: medicamento.nombre,
         dosis: medicamento.dosis,
@@ -622,7 +641,7 @@ function closeCitaModal() {
 
 async function editCita(id) {
     const citas = await Storage.getCitas();
-    const cita = citas.find(c => c.id === id);
+    const cita = citas.find(c => String(c.id) === String(id));
     if (!cita) return;
     
     editingCitaId = id;
@@ -689,7 +708,7 @@ async function loadSintomas() {
     }
     
     await renderSintomasList();
-    updateSignosVitales();
+    await updateSignosVitales();
 }
 
 async function renderSintomasList() {
@@ -737,8 +756,8 @@ async function renderSintomasList() {
     }).join('');
 }
 
-function updateSignosVitales() {
-    const signos = Storage.getSignosVitales();
+async function updateSignosVitales() {
+    const signos = await Storage.getSignosVitales();
     
     // Actualizar últimos valores
     const tipos = ['presion', 'glucosa', 'temperatura', 'peso'];
@@ -976,7 +995,7 @@ async function saveSigno(event) {
         signo.valor = parseFloat(document.getElementById('signoValor').value);
     }
     
-    Storage.addSignoVital(signo);
+    await Storage.addSignoVital(signo);
     closeSignoModal();
     await loadSintomas();
 }
@@ -1104,7 +1123,7 @@ function closeTareaModal() {
 
 async function editTarea(id) {
     const tareas = await Storage.getTareas();
-    const tarea = tareas.find(t => t.id === id);
+    const tarea = tareas.find(t => String(t.id) === String(id));
     if (!tarea) return;
     
     editingTareaId = id;
@@ -1136,7 +1155,7 @@ async function deleteTarea(id) {
 
 async function toggleTareaCompletada(id) {
     const tareas = await Storage.getTareas();
-    const tarea = tareas.find(t => t.id === id);
+    const tarea = tareas.find(t => String(t.id) === String(id));
     if (tarea) {
         await Storage.updateTarea(id, { completada: !tarea.completada });
         await loadTareas();
@@ -1296,7 +1315,7 @@ function closeContactoModal() {
 
 async function editContacto(id) {
     const contactos = await Storage.getContactos();
-    const contacto = contactos.find(c => c.id === id);
+    const contacto = contactos.find(c => String(c.id) === String(id));
     if (!contacto) return;
     
     editingContactoId = id;

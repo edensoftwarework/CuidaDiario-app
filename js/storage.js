@@ -11,9 +11,22 @@ const Storage = {
     KEYS: {
         PREMIUM_STATUS: 'cuidadiario_premium',
         SETTINGS: 'cuidadiario_settings',
-        WELCOME_SHOWN: 'cuidadiario_welcome_shown',
-        HISTORIAL_MEDICAMENTOS: 'cuidadiario_historial_medicamentos',
-        SIGNOS_VITALES: 'cuidadiario_signos_vitales'
+        WELCOME_SHOWN: 'cuidadiario_welcome_shown'
+    },
+
+    // Claves que dependen del usuario (evitar compartir datos entre cuentas)
+    getUserKey(base) {
+        const user = API.getUser();
+        const uid = user ? user.id : 'guest';
+        return `${base}_${uid}`;
+    },
+
+    getHistorialKey() {
+        return this.getUserKey('cuidadiario_historial_medicamentos');
+    },
+
+    getSignosKey() {
+        return this.getUserKey('cuidadiario_signos_vitales');
     },
 
     get(key) {
@@ -238,41 +251,52 @@ const Storage = {
     },
 
     // ========== HISTORIAL Y SIGNOS (localStorage) ==========
-    getHistorialMedicamentos() {
-        return this.get(this.KEYS.HISTORIAL_MEDICAMENTOS) || [];
+    // ========== HISTORIAL MEDICAMENTOS (API) ==========
+    async getHistorialMedicamentos() {
+        try {
+            return await API.getHistorialMedicamentos();
+        } catch (error) {
+            console.error('Error:', error);
+            return [];
+        }
     },
 
-    addHistorialMedicamento(registro) {
-        const historial = this.getHistorialMedicamentos();
-        registro.id = Date.now().toString();
-        registro.fecha = new Date().toISOString();
-        historial.push(registro);
-        if (historial.length > 1000) historial.shift();
-        this.set(this.KEYS.HISTORIAL_MEDICAMENTOS, historial);
-        return registro;
+    async addHistorialMedicamento(registro) {
+        try {
+            return await API.createHistorialMedicamento(registro);
+        } catch (error) {
+            console.error('Error:', error);
+        }
     },
 
-    getSignosVitales() {
-        return this.get(this.KEYS.SIGNOS_VITALES) || [];
+    // ========== SIGNOS VITALES (API) ==========
+    async getSignosVitales() {
+        try {
+            return await API.getSignosVitales();
+        } catch (error) {
+            console.error('Error:', error);
+            return [];
+        }
     },
 
-    saveSignosVitales(signos) {
-        return this.set(this.KEYS.SIGNOS_VITALES, signos);
+    async addSignoVital(signo) {
+        try {
+            return await API.createSignoVital(signo);
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Error al guardar signo vital: ' + error.message);
+            throw error;
+        }
     },
 
-    addSignoVital(signo) {
-        const signos = this.getSignosVitales();
-        signo.id = Date.now().toString();
-        signos.push(signo);
-        if (signos.length > 500) signos.shift();
-        this.saveSignosVitales(signos);
-        return signo;
-    },
-
-    deleteSignoVital(id) {
-        const signos = this.getSignosVitales();
-        const filtered = signos.filter(s => s.id !== id);
-        this.saveSignosVitales(filtered);
+    async deleteSignoVital(id) {
+        try {
+            return await API.deleteSignoVital(id);
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Error al eliminar: ' + error.message);
+            throw error;
+        }
     },
 
     // ========== PREMIUM ==========

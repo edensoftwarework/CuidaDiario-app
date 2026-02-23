@@ -173,9 +173,10 @@ const Notifications = {
             return medicamento.horariosCustom.split(',').map(h => h.trim());
         }
 
-        if (!medicamento.horaInicio) return horarios;
+        const horaInicioStr = medicamento.hora_inicio || medicamento.horaInicio;
+        if (!horaInicioStr) return horarios;
 
-        const [hora, minutos] = medicamento.horaInicio.split(':').map(Number);
+        const [hora, minutos] = horaInicioStr.split(':').map(Number);
         
         const frecuencias = {
             'cada-4h': 4,

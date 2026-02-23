@@ -314,6 +314,50 @@ const API = {
             headers: this.getHeaders()
         });
         return this.handleResponse(response);
+    },
+
+    // ==================== SIGNOS VITALES ====================
+
+    async getSignosVitales() {
+        const response = await fetch(`${this.BASE_URL}/api/signos-vitales`, {
+            headers: this.getHeaders()
+        });
+        return this.handleResponse(response);
+    },
+
+    async createSignoVital(data) {
+        const response = await fetch(`${this.BASE_URL}/api/signos-vitales`, {
+            method: 'POST',
+            headers: this.getHeaders(),
+            body: JSON.stringify(data)
+        });
+        return this.handleResponse(response);
+    },
+
+    async deleteSignoVital(id) {
+        const response = await fetch(`${this.BASE_URL}/api/signos-vitales/${id}`, {
+            method: 'DELETE',
+            headers: this.getHeaders()
+        });
+        return this.handleResponse(response);
+    },
+
+    // ==================== HISTORIAL MEDICAMENTOS ====================
+
+    async getHistorialMedicamentos() {
+        const response = await fetch(`${this.BASE_URL}/api/historial-medicamentos`, {
+            headers: this.getHeaders()
+        });
+        return this.handleResponse(response);
+    },
+
+    async createHistorialMedicamento(data) {
+        const response = await fetch(`${this.BASE_URL}/api/historial-medicamentos`, {
+            method: 'POST',
+            headers: this.getHeaders(),
+            body: JSON.stringify(data)
+        });
+        return this.handleResponse(response);
     }
 };
 

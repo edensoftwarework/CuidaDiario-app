@@ -130,7 +130,7 @@ const Reports = {
             <h3>${med.nombre}</h3>
             <p><strong>Dosis:</strong> ${med.dosis}</p>
             <p><strong>Frecuencia:</strong> ${this.formatFrecuencia(med.frecuencia)}</p>
-            ${med.horaInicio ? `<p><strong>Hora de inicio:</strong> ${med.horaInicio}</p>` : ''}
+            ${(med.hora_inicio || med.horaInicio) ? `<p><strong>Hora de inicio:</strong> ${med.hora_inicio || med.horaInicio}</p>` : ''}
             ${med.notas ? `<p><strong>Notas:</strong> ${med.notas}</p>` : ''}
             <p><strong>Recordatorio:</strong> ${med.recordatorio ? 'Activado' : 'Desactivado'}</p>
         </div>
