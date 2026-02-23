@@ -376,9 +376,21 @@ body {
 }
 
 .upcoming-time {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
     font-weight: 600;
     color: var(--primary-color);
-    min-width: 80px;
+    min-width: 70px;
+    text-align: center;
+}
+
+.upcoming-date-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 2px;
+    text-transform: capitalize;
 }
 
 .upcoming-content {

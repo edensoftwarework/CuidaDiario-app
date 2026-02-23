@@ -365,9 +365,10 @@ const Storage = {
         if (isPremium) return true;
 
         const limits = {
-            medicamentos: 3,
-            tareas: 3,
-            contactos: 3
+            medicamentos: 1,
+            citas: 1,
+            tareas: 1,
+            contactos: 1
         };
 
         return current < (limits[type] || Infinity);
@@ -379,33 +380,42 @@ const Storage = {
         
         if (isPremium) {
             return {
+                premium: true,
                 medicamentos: { current: 999, max: 999, exceeded: false },
+                citas: { current: 999, max: 999, exceeded: false },
                 tareas: { current: 999, max: 999, exceeded: false },
                 contactos: { current: 999, max: 999, exceeded: false }
             };
         }
 
-        const [medicamentos, tareas, contactos] = await Promise.all([
+        const [medicamentos, citas, tareas, contactos] = await Promise.all([
             this.getMedicamentos(),
+            this.getCitas(),
             this.getTareas(),
             this.getContactos()
         ]);
 
         return {
+            premium: false,
             medicamentos: {
                 current: medicamentos.length,
-                max: 3,
-                exceeded: medicamentos.length >= 3
+                max: 1,
+                exceeded: medicamentos.length >= 1
+            },
+            citas: {
+                current: citas.length,
+                max: 1,
+                exceeded: citas.length >= 1
             },
             tareas: {
                 current: tareas.length,
-                max: 3,
-                exceeded: tareas.length >= 3
+                max: 1,
+                exceeded: tareas.length >= 1
             },
             contactos: {
                 current: contactos.length,
-                max: 3,
-                exceeded: contactos.length >= 3
+                max: 1,
+                exceeded: contactos.length >= 1
             }
         };
     },

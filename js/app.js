@@ -186,6 +186,18 @@ async function updateUpcomingActivities() {
         const weekFromNow = new Date(now);
         weekFromNow.setDate(weekFromNow.getDate() + 7);
         
+        const DIAS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+        const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+        const tomorrowDate = new Date(now); tomorrowDate.setDate(now.getDate() + 1);
+        const tomorrowStr = `${tomorrowDate.getFullYear()}-${String(tomorrowDate.getMonth()+1).padStart(2,'0')}-${String(tomorrowDate.getDate()).padStart(2,'0')}`;
+
+        function formatActivityDate(fechaPart) {
+            if (fechaPart === todayStr) return 'Hoy';
+            if (fechaPart === tomorrowStr) return 'Mañana';
+            const d = new Date(`${fechaPart}T00:00`);
+            return `${DIAS[d.getDay()]} ${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
+        }
+
         // Agregar citas próximas (próximos 7 días)
         const citas = await Storage.getCitas();
         citas.forEach(cita => {
@@ -198,6 +210,7 @@ async function updateUpcomingActivities() {
             if (citaDate > now && citaDate <= weekFromNow) {
                 activities.push({
                     time: cita.hora ? String(cita.hora).substring(0, 5) : 'Sin hora',
+                    dateDisplay: formatActivityDate(fechaPart),
                     title: cita.titulo,
                     subtitle: `Cita - ${cita.lugar || 'Sin ubicación'}`,
                     type: 'cita',
@@ -218,6 +231,7 @@ async function updateUpcomingActivities() {
             const th = tarea.hora ? String(tarea.hora).substring(0, 5) : '00:00';
             activities.push({
                 time: tarea.hora ? th : 'Sin hora',
+                dateDisplay: formatActivityDate(tf),
                 title: tarea.titulo,
                 subtitle: `Tarea - ${tarea.categoria || 'General'}`,
                 type: 'tarea',
@@ -235,7 +249,10 @@ async function updateUpcomingActivities() {
         
         list.innerHTML = activities.map(act => `
             <div class="upcoming-item">
-                <div class="upcoming-time">${act.time}</div>
+                <div class="upcoming-time">
+                    <div class="upcoming-date-label">${act.dateDisplay}</div>
+                    <div>${act.time}</div>
+                </div>
                 <div class="upcoming-content">
                     <h4>${act.title}</h4>
                     <p>${act.subtitle}</p>
@@ -469,6 +486,11 @@ let currentMonth = new Date();
 let editingCitaId = null;
 
 async function loadCitas() {
+    const limits = await Storage.checkLimits();
+    const warning = document.getElementById('citasLimitWarning');
+    if (warning) {
+        warning.style.display = (!limits.premium && limits.citas.exceeded) ? 'block' : 'none';
+    }
     await renderCalendar();
     await renderCitasList();
 }
@@ -686,6 +708,12 @@ async function saveCita(event) {
     if (id) {
         await Storage.updateCita(id, cita);
     } else {
+        const limits = await Storage.checkLimits();
+        if (!limits.premium && limits.citas.exceeded) {
+            closeCitaModal();
+            showPremiumModal();
+            return;
+        }
         await Storage.addCita(cita);
     }
     

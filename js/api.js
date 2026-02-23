@@ -103,7 +103,7 @@ const API = {
     
     logout() {
         this.removeToken();
-        window.location.href = '#login';
+        window.location.href = 'login.html';
     },
     
     // ==================== MEDICAMENTOS ====================
