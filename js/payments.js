@@ -9,7 +9,7 @@ const Payments = {
     // Configuración de pagos (IMPORTANTE: En producción, estas claves deben estar en el servidor)
     config: {
         mercadopago: {
-            publicKey: 'TEST-364b124b-7e69-41de-b6ed-943be0dd17ad',
+            publicKey: 'APP_USR-64e5463f-7f48-4e3d-bca4-b091f942ea41',
             preferenceId: null
         },
         paypal: {
