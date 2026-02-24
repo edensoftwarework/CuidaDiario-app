@@ -54,9 +54,13 @@
                     <span class="premium-icon"></span>
                     <span id="premiumText">Obtener Premium</span>
                 </button>
-                <button class="btn-secondary btn-logout" onclick="API.logout()">
-                    <span class="logout-icon">&#x23FB;</span>
-                    <span class="btn-logout-text">Cerrar</span>
+                <button class="btn-secondary btn-logout" onclick="API.logout()" title="Cerrar sesión">
+                    <svg class="logout-icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                        <polyline points="16 17 21 12 16 7"/>
+                        <line x1="21" y1="12" x2="9" y2="12"/>
+                    </svg>
+                    <span class="btn-logout-text">Cerrar sesión</span>
                 </button>
             </div>
         </div>
@@ -149,7 +153,7 @@
                 </div>
 
                 <div class="limit-warning" id="medLimitWarning" style="display: none;">
-                    ⚠️ Versión gratuita: máximo 1 medicamento. <a href="#premium" onclick="showPremiumModal()">Actualiza a Premium</a>
+                    &#9888;&#65039; Versión gratuita: máximo 3 medicamentos. <a href="#premium" onclick="showPremiumModal()">Actualiza a Premium</a>
                 </div>
 
                 <div class="medicamentos-list" id="medicamentosList">
@@ -173,7 +177,7 @@
                 </div>
 
                 <div class="limit-warning" id="citasLimitWarning" style="display: none;">
-                    ⚠️ Versión gratuita: máximo 1 cita. <a href="#premium" onclick="showPremiumModal()">Actualiza a Premium</a>
+                    &#9888;&#65039; Versión gratuita: máximo 3 citas. <a href="#premium" onclick="showPremiumModal()">Actualiza a Premium</a>
                 </div>
 
                 <!-- Vista de calendario simple -->
@@ -209,59 +213,59 @@
                     <button class="btn-primary" onclick="openSintomaModal()">+ Registrar Síntoma</button>
                 </div>
 
-                <div class="premium-feature" id="sintomasPremiumWarning" style="display: none;">
-                    <div class="premium-lock">🔒</div>
-                    <p>El seguimiento avanzado de síntomas está disponible en la versión Premium</p>
-                    <button class="btn-premium-small" onclick="showPremiumModal()">Ver Premium</button>
+                <!-- Bloqueo completo para usuario gratuito -->
+                <div class="section-premium-block" id="sintomasPremiumBlock" style="display: none;">
+                    <div class="section-lock-icon">&#128274;</div>
+                    <h3>Funcionalidad Premium</h3>
+                    <p>El seguimiento de síntomas y signos vitales está disponible exclusivamente en el plan Premium.</p>
+                    <button class="btn-premium-cta" onclick="showPremiumModal()">Suscribirse por $4.000/mes</button>
+                    <p class="section-lock-note">Plan mensual &middot; Cancela cuando quieras</p>
                 </div>
 
-                <!-- Pestañas de seguimiento -->
-                <div class="tabs">
-                    <button class="tab-btn active" onclick="switchSintomaTab('registros')">Registros</button>
-                    <button class="tab-btn" onclick="switchSintomaTab('signos')">Signos Vitales</button>
-                    <button class="tab-btn" onclick="switchSintomaTab('graficas')">Gráficas</button>
-                </div>
+                <!-- Contenido (solo Premium) -->
+                <div id="sintomasContent">
+                    <!-- Pestañas de seguimiento -->
+                    <div class="tabs">
+                        <button class="tab-btn active" onclick="switchSintomaTab('registros')">Registros</button>
+                        <button class="tab-btn" onclick="switchSintomaTab('signos')">Signos Vitales</button>
+                    </div>
 
-                <!-- Contenido de pestañas -->
-                <div class="tab-content">
-                    <div id="sintomas-registros" class="tab-panel active">
-                        <div class="sintomas-list" id="sintomasList">
-                            <p class="empty-state">No hay síntomas registrados</p>
-                        </div>
-                    </div>
-                    <div id="sintomas-signos" class="tab-panel">
-                        <div class="signos-vitales-grid">
-                            <div class="signo-card">
-                                <h4>Presión Arterial</h4>
-                                <div class="signo-value" id="presionValue">--/--</div>
-                                <button class="btn-small" onclick="registrarSigno('presion')">Registrar</button>
-                            </div>
-                            <div class="signo-card">
-                                <h4>Glucosa</h4>
-                                <div class="signo-value" id="glucosaValue">-- mg/dL</div>
-                                <button class="btn-small" onclick="registrarSigno('glucosa')">Registrar</button>
-                            </div>
-                            <div class="signo-card">
-                                <h4>Temperatura</h4>
-                                <div class="signo-value" id="temperaturaValue">-- °C</div>
-                                <button class="btn-small" onclick="registrarSigno('temperatura')">Registrar</button>
-                            </div>
-                            <div class="signo-card">
-                                <h4>Peso</h4>
-                                <div class="signo-value" id="pesoValue">-- kg</div>
-                                <button class="btn-small" onclick="registrarSigno('peso')">Registrar</button>
+                    <!-- Contenido de pestañas -->
+                    <div class="tab-content">
+                        <div id="sintomas-registros" class="tab-panel active">
+                            <div class="sintomas-list" id="sintomasList">
+                                <p class="empty-state">No hay síntomas registrados</p>
                             </div>
                         </div>
-                        <div class="signos-historial" id="signosHistorial">
-                            <h4>Historial de Signos Vitales</h4>
-                            <div id="signosHistorialList">
-                                <p class="empty-state">No hay signos vitales registrados</p>
+                        <div id="sintomas-signos" class="tab-panel">
+                            <div class="signos-vitales-grid">
+                                <div class="signo-card">
+                                    <h4>Presión Arterial</h4>
+                                    <div class="signo-value" id="presionValue">--/--</div>
+                                    <button class="btn-small" onclick="registrarSigno('presion')">Registrar</button>
+                                </div>
+                                <div class="signo-card">
+                                    <h4>Glucosa</h4>
+                                    <div class="signo-value" id="glucosaValue">-- mg/dL</div>
+                                    <button class="btn-small" onclick="registrarSigno('glucosa')">Registrar</button>
+                                </div>
+                                <div class="signo-card">
+                                    <h4>Temperatura</h4>
+                                    <div class="signo-value" id="temperaturaValue">-- °C</div>
+                                    <button class="btn-small" onclick="registrarSigno('temperatura')">Registrar</button>
+                                </div>
+                                <div class="signo-card">
+                                    <h4>Peso</h4>
+                                    <div class="signo-value" id="pesoValue">-- kg</div>
+                                    <button class="btn-small" onclick="registrarSigno('peso')">Registrar</button>
+                                </div>
                             </div>
-                        </div>
-                    </div>
-                    <div id="sintomas-graficas" class="tab-panel">
-                        <div class="chart-container" id="chartContainer">
-                            <p class="info-message">Las gráficas se generarán cuando tengas suficientes registros de signos vitales</p>
+                            <div class="signos-historial" id="signosHistorial">
+                                <h4>Historial de Signos Vitales</h4>
+                                <div id="signosHistorialList">
+                                    <p class="empty-state">No hay signos vitales registrados</p>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -275,7 +279,7 @@
                 </div>
 
                 <div class="limit-warning" id="tareasLimitWarning" style="display: none;">
-                    ⚠️ Versión gratuita: máximo 1 tarea activa. <a href="#premium" onclick="showPremiumModal()">Actualiza a Premium</a>
+                    &#9888;&#65039; Versión gratuita: máximo 3 tareas activas. <a href="#premium" onclick="showPremiumModal()">Actualiza a Premium</a>
                 </div>
 
                 <!-- Filtros de tareas -->
@@ -325,10 +329,12 @@
                     <h2>Historial y Reportes</h2>
                 </div>
 
-                <div class="premium-feature" id="reportesPremiumWarning" style="display: none;">
-                    <div class="premium-lock">🔒</div>
-                    <p>Los reportes y exportación de datos están disponibles en la versión Premium</p>
-                    <button class="btn-premium-small" onclick="showPremiumModal()">Ver Premium</button>
+                <div class="section-premium-block" id="reportesPremiumBlock" style="display: none;">
+                    <div class="section-lock-icon">&#128274;</div>
+                    <h3>Funcionalidad Premium</h3>
+                    <p>Los reportes, historial completo y exportación de datos están disponibles en el plan Premium.</p>
+                    <button class="btn-premium-cta" onclick="showPremiumModal()">Suscribirse por $4.000/mes</button>
+                    <p class="section-lock-note">Plan mensual &middot; Cancela cuando quieras</p>
                 </div>
 
                 <div id="reportesContent">
@@ -789,44 +795,51 @@
             </div>
             <div class="premium-content">
                 <div class="premium-benefits">
-                    <h4>Beneficios Premium:</h4>
+                    <h4>Con Premium obtenés:</h4>
                     <ul>
-                        <li>&#10003; <strong>Múltiples pacientes</strong> — gestiona a toda tu familia</li>
-                        <li>&#10003; Medicamentos y tareas <strong>ilimitados</strong></li>
-                        <li>&#10003; Citas médicas sin límites</li>
-                        <li>&#10003; Historial completo y reportes exportables</li>
-                        <li>&#10003; Seguimiento avanzado de síntomas y signos vitales</li>
+                        <li>&#10003; <strong>Múltiples pacientes</strong> — gestioná a toda tu familia</li>
+                        <li>&#10003; Medicamentos, citas y tareas <strong>ilimitados</strong></li>
+                        <li>&#10003; <strong>Seguimiento completo</strong> de síntomas y signos vitales</li>
+                        <li>&#10003; Historial completo y <strong>reportes exportables</strong></li>
                         <li>&#10003; Agenda de contactos ampliada</li>
                         <li>&#10003; Exportación e importación de datos</li>
-                        <li>&#10003; Gráficas y análisis de tendencias</li>
                         <li>&#10003; Soporte prioritario</li>
                     </ul>
                 </div>
                 <div class="premium-pricing">
                     <div class="price-card">
                         <h4>🇦🇷 Argentina</h4>
-                        <div class="price">$29.999 ARS</div>
-                        <p class="price-detail">Pago único - Acceso de por vida</p>
-                        <button class="btn-payment" onclick="procesarPago('mercadopago', 'ARS', 29999)">
-                            Pagar con MercadoPago
+                        <div class="price">$4.000 ARS<span style="font-size:0.55em;font-weight:400">/mes</span></div>
+                        <p class="price-detail">Suscripción mensual — cancelá cuando quieras</p>
+                        <button class="btn-payment" onclick="procesarPago('mercadopago', 'ARS', 4000)">
+                            Suscribirse con MercadoPago
                         </button>
                     </div>
                     <div class="price-card">
                         <h4>🌎 Internacional</h4>
-                        <div class="price">$19.99 USD</div>
-                        <p class="price-detail">Pago único - Acceso de por vida</p>
-                        <button class="btn-payment" onclick="procesarPago('paypal', 'USD', 19.99)">
-                            Pagar con PayPal
-                        </button>
-                        <button class="btn-payment btn-payment-alt" onclick="procesarPago('stripe', 'USD', 19.99)">
-                            Pagar con Tarjeta (Stripe)
+                        <div class="price">$3 USD<span style="font-size:0.55em;font-weight:400">/mes</span></div>
+                        <p class="price-detail">Monthly subscription — cancel any time</p>
+                        <button class="btn-payment" onclick="procesarPago('paypal', 'USD', 3)">
+                            Suscribirse con PayPal
                         </button>
                     </div>
                 </div>
                 <p class="premium-guarantee">
-                    🔒 Pago seguro | 💯 Satisfacción garantizada | 📧 Soporte incluido
+                    🔒 Pago seguro &nbsp;|&nbsp; 🔄 Renovación mensual &nbsp;|&nbsp; 📧 Soporte incluido
                 </p>
             </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <!-- Aviso de Cookies -->
+    <div id="cookieBanner" class="cookie-banner" style="display: none;">
+        <p>&#127850; Utilizamos cookies esenciales para el funcionamiento de la app. Al continuar, aceptas nuestra <a href="pages/privacy.html">Política de Privacidad</a>.</p>
+        <div class="cookie-banner-actions">
+            <button class="btn-cookie-info" onclick="window.open('pages/privacy.html','_blank')">Más info</button>
+            <button class="btn-cookie-accept" onclick="acceptCookies()">Aceptar</button>
         </div>
     </div>
 

@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>¡Suscripción activada! — CuidaDiario</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: #fff;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.07);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 24px;
+            padding: 50px 40px;
+            max-width: 480px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 25px 60px rgba(0, 0, 0, 0.4);
+        }
+
+        .logo {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: rgba(255,255,255,0.6);
+            margin-bottom: 32px;
+            letter-spacing: 0.5px;
+        }
+
+        .logo span {
+            color: #f0c040;
+        }
+
+        /* Estados: loading, success, pending, error */
+        .state-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            display: block;
+        }
+
+        .status-title {
+            font-size: 1.7rem;
+            font-weight: 700;
+            margin-bottom: 12px;
+            color: #fff;
+        }
+
+        .status-msg {
+            font-size: 1rem;
+            color: rgba(255,255,255,0.75);
+            line-height: 1.6;
+            margin-bottom: 28px;
+        }
+
+        /* Spinner */
+        .spinner {
+            width: 56px;
+            height: 56px;
+            border: 4px solid rgba(255,255,255,0.15);
+            border-top-color: #f0c040;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Checkmark animado */
+        .check-circle {
+            width: 72px;
+            height: 72px;
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+            animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 8px 24px rgba(76, 175, 80, 0.4);
+        }
+        .check-circle svg { width: 36px; height: 36px; }
+        @keyframes popIn {
+            0% { transform: scale(0); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .btn-app {
+            display: inline-block;
+            padding: 14px 32px;
+            background: linear-gradient(135deg, #f0c040, #e8a800);
+            color: #1a1a2e;
+            font-weight: 700;
+            font-size: 1rem;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 16px rgba(240, 192, 64, 0.35);
+        }
+        .btn-app:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(240, 192, 64, 0.5);
+        }
+
+        .redirect-note {
+            margin-top: 16px;
+            font-size: 0.85rem;
+            color: rgba(255,255,255,0.45);
+        }
+
+        .progress-bar-wrap {
+            width: 100%;
+            height: 4px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 2px;
+            margin: 20px 0;
+            overflow: hidden;
+        }
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #f0c040, #4CAF50);
+            border-radius: 2px;
+            transition: width 2s linear;
+            width: 0%;
+        }
+
+        /* Estado pendiente */
+        .pending-icon {
+            font-size: 3.5rem;
+            margin-bottom: 16px;
+            display: block;
+        }
+
+        .support-link {
+            color: #f0c040;
+            text-decoration: none;
+        }
+        .support-link:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="logo">Cuida<span>Diario</span> by EDEN SoftWork</div>
+
+        <!-- Estado: verificando pago -->
+        <div id="stateLoading">
+            <div class="spinner"></div>
+            <div class="status-title">Verificando tu suscripción...</div>
+            <div class="status-msg">Estamos confirmando tu pago con MercadoPago. Esto tarda solo unos segundos.</div>
+            <div class="progress-bar-wrap">
+                <div class="progress-bar" id="progressBar"></div>
+            </div>
+        </div>
+
+        <!-- Estado: premium activado -->
+        <div id="stateSuccess" style="display:none;">
+            <div class="check-circle">
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+            </div>
+            <div class="status-title">¡Bienvenido a Premium! 🎉</div>
+            <div class="status-msg">Tu cuenta fue activada exitosamente. Ya podés disfrutar de todas las funciones sin límites.</div>
+            <a href="../index.html" class="btn-app">Ir a la app →</a>
+            <div class="redirect-note">Redirigiendo automáticamente...</div>
+        </div>
+
+        <!-- Estado: pago en proceso (webhook tardó) -->
+        <div id="statePending" style="display:none;">
+            <span class="pending-icon">⏳</span>
+            <div class="status-title">Pago recibido</div>
+            <div class="status-msg">
+                Tu pago fue procesado por MercadoPago. La activación puede demorar hasta 5 minutos.<br><br>
+                Si en unos minutos tu cuenta no está activa, escribinos a <a href="mailto:soporte@edensoftwork.com" class="support-link">soporte@edensoftwork.com</a>
+            </div>
+            <a href="../index.html" class="btn-app">Ir a la app</a>
+        </div>
+
+        <!-- Estado: no autenticado -->
+        <div id="stateNoAuth" style="display:none;">
+            <span class="state-icon">🔐</span>
+            <div class="status-title">Pago recibido</div>
+            <div class="status-msg">Tu pago fue procesado. Iniciá sesión en la app para acceder a tu cuenta Premium.</div>
+            <a href="../login.html" class="btn-app">Iniciar sesión</a>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'https://cuidadiario-backend-production.up.railway.app';
+        const MAX_ATTEMPTS = 15; // 30 segundos (cada 2s)
+        let attempts = 0;
+        let pollInterval = null;
+
+        function show(stateId) {
+            ['stateLoading', 'stateSuccess', 'statePending', 'stateNoAuth'].forEach(id => {
+                document.getElementById(id).style.display = id === stateId ? 'block' : 'none';
+            });
+        }
+
+        function animateProgress() {
+            // Animar la barra de progreso durante los 30 segundos de polling
+            const bar = document.getElementById('progressBar');
+            let pct = 0;
+            const step = 100 / MAX_ATTEMPTS;
+            pollInterval = setInterval(async () => {
+                attempts++;
+                pct = Math.min(pct + step, 95);
+                bar.style.width = pct + '%';
+                await checkPremium();
+            }, 2000);
+        }
+
+        async function checkPremium() {
+            try {
+                const token = localStorage.getItem('cuidadiario_token');
+                const res = await fetch(`${API_BASE}/api/me`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const user = await res.json();
+
+                if (user.premium) {
+                    clearInterval(pollInterval);
+                    // Actualizar usuario en localStorage
+                    const saved = JSON.parse(localStorage.getItem('cuidadiario_user') || '{}');
+                    saved.premium = true;
+                    localStorage.setItem('cuidadiario_user', JSON.stringify(saved));
+
+                    document.getElementById('progressBar').style.width = '100%';
+                    setTimeout(() => {
+                        show('stateSuccess');
+                        // Redirigir a la app después de 3 segundos
+                        setTimeout(() => { window.location.href = '../index.html'; }, 3000);
+                    }, 400);
+                    return;
+                }
+            } catch (e) {
+                console.warn('Error verificando premium:', e);
+            }
+
+            if (attempts >= MAX_ATTEMPTS) {
+                clearInterval(pollInterval);
+                show('statePending');
+            }
+        }
+
+        function init() {
+            const token = localStorage.getItem('cuidadiario_token');
+            if (!token) {
+                show('stateNoAuth');
+                return;
+            }
+            show('stateLoading');
+            animateProgress();
+        }
+
+        init();
+    </script>
+</body>
+</html>

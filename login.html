@@ -161,6 +161,7 @@
             <div class="form-tabs">
                 <button class="form-tab active" onclick="switchTab('login')">Iniciar Sesión</button>
                 <button class="form-tab" onclick="switchTab('register')">Registrarse</button>
+                <button class="form-tab" onclick="switchTab('forgot')">Olvidé mi contraseña</button>
             </div>
             
             <div id="errorMessage" class="error-message"></div>
@@ -202,6 +203,24 @@
                     </div>
                     <button type="submit" class="btn-submit" id="btnRegister">Registrarse</button>
                 </form>
+            </div>
+            
+            <!-- Formulario de Recuperación de Contraseña -->
+            <div id="forgotForm" class="form-content">
+                <p style="color:#555;font-size:0.93rem;margin-bottom:18px;">
+                    Ingresá tu email y te enviaremos instrucciones para restablecer tu contraseña.
+                </p>
+                <form onsubmit="handleForgotPassword(event)">
+                    <div class="form-group">
+                        <label for="forgotEmail">Email registrado</label>
+                        <input type="email" id="forgotEmail" required placeholder="tu@email.com">
+                    </div>
+                    <button type="submit" class="btn-submit" id="btnForgot">Enviar instrucciones</button>
+                </form>
+                <p style="margin-top:16px;font-size:0.82rem;color:#888;">
+                    ¿No recibís el email? Revisá la carpeta de spam o contactanos en
+                    <a href="mailto:soporte@edensoftwork.com">soporte@edensoftwork.com</a>
+                </p>
             </div>
             
             <div class="login-footer">
@@ -308,6 +327,28 @@
             }
         }
         
+        async function handleForgotPassword(event) {
+            event.preventDefault();
+            const email = document.getElementById('forgotEmail').value;
+            const btn = document.getElementById('btnForgot');
+            btn.disabled = true;
+            btn.textContent = 'Enviando...';
+            try {
+                const response = await fetch(`${API.BASE_URL}/api/forgot-password`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                });
+                // Siempre mostrar éxito por seguridad (no revelar si el email existe)
+                showSuccess('Si ese email está registrado, recibirás las instrucciones en breve. Revisá también la carpeta de spam.');
+            } catch (err) {
+                showSuccess('Si ese email está registrado, recibirás las instrucciones en breve.');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Enviar instrucciones';
+            }
+        }
+
         // Redirigir si ya está autenticado
         if (API.isAuthenticated()) {
             window.location.href = 'index.html';

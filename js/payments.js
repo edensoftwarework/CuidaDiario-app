@@ -9,7 +9,7 @@ const Payments = {
     // Configuración de pagos (IMPORTANTE: En producción, estas claves deben estar en el servidor)
     config: {
         mercadopago: {
-            publicKey: 'TEST-YOUR-PUBLIC-KEY', // Reemplazar con tu Public Key de MercadoPago
+            publicKey: 'TEST-364b124b-7e69-41de-b6ed-943be0dd17ad',
             preferenceId: null
         },
         paypal: {
@@ -23,8 +23,8 @@ const Payments = {
     },
 
     prices: {
-        ARS: 29999,
-        USD: 19.99
+        ARS: 4000,
+        USD: 3
     },
 
     /**
@@ -56,52 +56,53 @@ const Payments = {
     },
 
     /**
-     * Inicializar pago con MercadoPago
-     * IMPORTANTE: En producción, la creación de preferencia debe hacerse desde el backend
+     * Inicializar pago con MercadoPago — flujo real de suscripción mensual
      */
     async initMercadoPago(currency, amount) {
-        try {
-            // Mostrar mensaje de desarrollo
-            alert(`MODO DESARROLLO: MercadoPago\n\nPara integrar MercadoPago en producción:\n\n1. Crear cuenta en mercadopago.com.ar\n2. Obtener credenciales (Public Key y Access Token)\n3. Crear preferencia de pago desde el backend\n4. Usar el SDK de MercadoPago\n\nPrecio: $${amount} ${currency}`);
+        // Verificar sesión activa
+        const token = API.getToken();
+        if (!token) {
+            if (typeof showToast === 'function') showToast('Debes iniciar sesión para suscribirte.', 'error');
+            else alert('Debes iniciar sesión para suscribirte.');
+            return;
+        }
 
-            // Simular pago exitoso en desarrollo
-            if (confirm('¿Simular pago exitoso para testing?')) {
-                this.handleSuccessfulPayment({
-                    method: 'mercadopago',
-                    transactionId: `MP-${Date.now()}`,
-                    amount: amount,
-                    currency: currency
-                });
+        // Cerrar modal y mostrar feedback
+        if (typeof closePremiumModal === 'function') closePremiumModal();
+        if (typeof showToast === 'function') showToast('Conectando con MercadoPago...', 'info', 4000);
+
+        // Deshabilitar botón si existe
+        const btn = document.querySelector('[onclick*="mercadopago"]');
+        if (btn) { btn.disabled = true; btn.textContent = 'Procesando...'; }
+
+        try {
+            const response = await fetch(`${API.BASE_URL}/api/create-subscription`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                const msg = data.error || 'Error al iniciar el pago. Intentá nuevamente.';
+                if (typeof showToast === 'function') showToast(msg, 'error');
+                else alert(msg);
+                if (btn) { btn.disabled = false; btn.textContent = 'Suscribirme con MercadoPago'; }
+                return;
             }
 
-            /* CÓDIGO PARA PRODUCCIÓN (requiere backend):
-            
-            // 1. Crear preferencia en tu backend
-            const response = await fetch('YOUR_BACKEND_URL/create-preference', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    title: 'CuidaDiario Premium',
-                    unit_price: amount,
-                    quantity: 1,
-                    currency_id: currency
-                })
-            });
-            
-            const { preferenceId } = await response.json();
-            
-            // 2. Redirigir a MercadoPago
-            const mp = new MercadoPago(this.config.mercadopago.publicKey);
-            mp.checkout({
-                preference: { id: preferenceId },
-                autoOpen: true
-            });
-            
-            */
+            // Redirigir al checkout de MercadoPago
+            window.location.href = data.init_point;
 
         } catch (error) {
             console.error('Error en MercadoPago:', error);
-            alert('Error al procesar el pago. Por favor, intenta nuevamente.');
+            const msg = 'Error de conexión. Revisá tu internet e intentá nuevamente.';
+            if (typeof showToast === 'function') showToast(msg, 'error');
+            else alert(msg);
+            if (btn) { btn.disabled = false; btn.textContent = 'Suscribirme con MercadoPago'; }
         }
     },
 

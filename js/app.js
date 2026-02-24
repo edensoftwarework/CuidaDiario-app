@@ -29,6 +29,9 @@ async function initApp() {
     // Configurar fecha de hoy en inputs
     setDefaultDates();
     
+    // Inicializar banner de cookies
+    initCookieBanner();
+
     // Inicializar calendario
     initCalendar();
 }
@@ -728,16 +731,21 @@ async function saveCita(event) {
 // ========== SÍNTOMAS Y SIGNOS VITALES ==========
 async function loadSintomas() {
     const isPremium = Storage.getPremiumStatus();
-    const warningDiv = document.getElementById('sintomasPremiumWarning');
-    
+    const premiumBlock = document.getElementById('sintomasPremiumBlock');
+    const content = document.getElementById('sintomasContent');
+    const addBtn = document.querySelector('#sintomas .section-header .btn-primary');
+
     if (!isPremium) {
-        warningDiv.style.display = 'block';
-        // Ocultar algunas funcionalidades
-        document.querySelector('[onclick="switchSintomaTab(\'graficas\')"]').disabled = true;
-    } else {
-        warningDiv.style.display = 'none';
+        if (premiumBlock) premiumBlock.style.display = 'flex';
+        if (content) content.style.display = 'none';
+        if (addBtn) addBtn.style.display = 'none';
+        return;
     }
-    
+
+    if (premiumBlock) premiumBlock.style.display = 'none';
+    if (content) content.style.display = 'block';
+    if (addBtn) addBtn.style.display = '';
+
     await renderSintomasList();
     await updateSignosVitales();
 }
@@ -1398,15 +1406,15 @@ async function saveContacto(event) {
 // ========== REPORTES ==========
 async function loadReportes() {
     const isPremium = Storage.getPremiumStatus();
-    const warningDiv = document.getElementById('reportesPremiumWarning');
+    const premiumBlock = document.getElementById('reportesPremiumBlock');
     const contentDiv = document.getElementById('reportesContent');
     
     if (!isPremium) {
-        warningDiv.style.display = 'block';
-        contentDiv.style.display = 'none';
+        if (premiumBlock) premiumBlock.style.display = 'flex';
+        if (contentDiv) contentDiv.style.display = 'none';
     } else {
-        warningDiv.style.display = 'none';
-        contentDiv.style.display = 'block';
+        if (premiumBlock) premiumBlock.style.display = 'none';
+        if (contentDiv) contentDiv.style.display = 'block';
         
         // Configurar fechas por defecto
         const today = new Date();
@@ -1440,11 +1448,16 @@ function updatePremiumStatus() {
     
     if (isPremium) {
         premiumStatus.style.display = 'block';
-        premiumText.textContent = 'Premium';
+        premiumText.textContent = '\u2713 Premium';
         btnPremium.style.background = 'linear-gradient(135deg, #4CAF50, #2E7D32)';
+        btnPremium.style.color = 'white';
+        btnPremium.title = 'Ya eres usuario Premium';
     } else {
         premiumStatus.style.display = 'none';
-        premiumText.textContent = 'Obtener Premium';
+        premiumText.textContent = 'Premium';
+        btnPremium.style.background = '';
+        btnPremium.style.color = '';
+        btnPremium.title = 'Obtener Premium';
     }
 }
 
@@ -1455,6 +1468,40 @@ function showPremiumModal() {
 function closePremiumModal() {
     document.getElementById('premiumModal').classList.remove('active');
 }
+
+// ========== TOASTS ==========
+function showToast(message, type = 'success', duration = 3500) {
+    const icons = { success: '\u2705', error: '\u274c', warning: '\u26a0\ufe0f', info: '\u2139\ufe0f' };
+    const container = document.getElementById('toastContainer');
+    if (!container) return;
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.innerHTML = `
+        <span class="toast-icon">${icons[type] || '\u2139\ufe0f'}</span>
+        <span class="toast-body">${message}</span>
+        <button class="toast-close" onclick="this.parentElement.remove()">&times;</button>
+    `;
+    toast.addEventListener('click', () => toast.remove());
+    container.appendChild(toast);
+    setTimeout(() => { if (toast.parentElement) toast.remove(); }, duration);
+}
+window.showToast = showToast;
+
+// ========== COOKIES ==========
+function initCookieBanner() {
+    const accepted = localStorage.getItem('cuidadiario_cookies_accepted');
+    if (!accepted) {
+        const banner = document.getElementById('cookieBanner');
+        if (banner) banner.style.display = 'flex';
+    }
+}
+
+function acceptCookies() {
+    localStorage.setItem('cuidadiario_cookies_accepted', '1');
+    const banner = document.getElementById('cookieBanner');
+    if (banner) banner.style.display = 'none';
+}
+window.acceptCookies = acceptCookies;
 
 // ========== UTILIDADES ==========
 function formatDate(dateStr) {

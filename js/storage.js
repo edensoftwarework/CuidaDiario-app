@@ -415,9 +415,9 @@ const Storage = {
         if (isPremium) return true;
 
         const limits = {
-            medicamentos: 1,
-            citas: 1,
-            tareas: 1,
+            medicamentos: 3,
+            citas: 3,
+            tareas: 3,
             contactos: 1
         };
 
@@ -449,18 +449,18 @@ const Storage = {
             premium: false,
             medicamentos: {
                 current: medicamentos.length,
-                max: 1,
-                exceeded: medicamentos.length >= 1
+                max: 3,
+                exceeded: medicamentos.length >= 3
             },
             citas: {
                 current: citas.length,
-                max: 1,
-                exceeded: citas.length >= 1
+                max: 3,
+                exceeded: citas.length >= 3
             },
             tareas: {
                 current: tareas.length,
-                max: 1,
-                exceeded: tareas.length >= 1
+                max: 3,
+                exceeded: tareas.length >= 3
             },
             contactos: {
                 current: contactos.length,
