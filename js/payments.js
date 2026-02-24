@@ -13,7 +13,7 @@ const Payments = {
             preferenceId: null
         },
         paypal: {
-            clientId: 'YOUR-PAYPAL-CLIENT-ID', // Reemplazar con tu Client ID de PayPal
+            clientId: 'AWwVGYftSyo3LPqMk5W5bArcczV12irsYNF0ckLztk-tAm5lJkyFyr83LtWx9uPinefZNQ1MflRt3GMD',
             planId: 'YOUR-PLAN-ID'
         },
         stripe: {
@@ -111,60 +111,100 @@ const Payments = {
      */
     async initPayPal(currency, amount) {
         try {
-            alert(`MODO DESARROLLO: PayPal\n\nPara integrar PayPal en producción:\n\n1. Crear cuenta Business en paypal.com\n2. Obtener Client ID y Secret\n3. Usar PayPal Checkout SDK\n4. Implementar botón de PayPal\n\nPrecio: $${amount} ${currency}`);
-
-            // Simular pago exitoso en desarrollo
-            if (confirm('¿Simular pago exitoso para testing?')) {
-                this.handleSuccessfulPayment({
-                    method: 'paypal',
-                    transactionId: `PP-${Date.now()}`,
-                    amount: amount,
-                    currency: currency
-                });
+            const token = API.getToken();
+            if (!token) {
+                if (typeof showToast === 'function') showToast('Debes iniciar sesión para suscribirte.', 'error');
+                else alert('Debes iniciar sesión para suscribirte.');
+                return;
             }
 
-            /* CÓDIGO PARA PRODUCCIÓN:
-            
-            // Cargar SDK de PayPal
+            // Cerrar modal premium si está abierto
+            if (typeof closePremiumModal === 'function') closePremiumModal();
+
+            // Mostrar feedback de carga
+            if (typeof showToast === 'function') showToast('Cargando PayPal...', 'info', 3000);
+
+            // Cargar SDK de PayPal si no está cargado aún
             if (!window.paypal) {
-                await this.loadPayPalSDK();
+                await this.loadPayPalSDK(currency);
             }
-            
-            // Renderizar botón de PayPal
+
+            // Eliminar modal anterior si existe
+            const existingModal = document.getElementById('paypal-modal');
+            if (existingModal) existingModal.remove();
+
+            // Crear modal con contenedor para el botón PayPal
+            const modal = document.createElement('div');
+            modal.id = 'paypal-modal';
+            modal.className = 'modal active';
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width: 450px; padding: 30px; text-align: center;">
+                    <h3 style="margin-bottom: 10px;">💳 Pago con PayPal</h3>
+                    <p style="color: #666; margin-bottom: 5px;">Plan Premium — CuidaDiario</p>
+                    <p style="font-size: 1.3rem; font-weight: 700; margin-bottom: 20px;">$${amount} ${currency}/mes</p>
+                    <div id="paypal-button-container" style="min-height: 45px;"></div>
+                    <button onclick="document.getElementById('paypal-modal').remove()" style="margin-top: 20px; background: none; border: none; color: #999; cursor: pointer; font-size: 0.9rem; text-decoration: underline;">Cancelar</button>
+                </div>
+            `;
+            document.body.appendChild(modal);
+
+            // Renderizar botones de PayPal
             paypal.Buttons({
-                createOrder: (data, actions) => {
-                    return actions.order.create({
-                        purchase_units: [{
-                            description: 'CuidaDiario Premium',
-                            amount: {
-                                currency_code: currency,
-                                value: amount
-                            }
-                        }]
-                    });
+                style: {
+                    layout: 'vertical',
+                    color: 'blue',
+                    shape: 'rect',
+                    label: 'paypal'
                 },
-                onApprove: (data, actions) => {
-                    return actions.order.capture().then(details => {
-                        this.handleSuccessfulPayment({
-                            method: 'paypal',
-                            transactionId: details.id,
-                            amount: amount,
-                            currency: currency,
-                            details: details
-                        });
+                // createOrder llama al backend para crear la orden de forma segura
+                createOrder: async () => {
+                    const response = await fetch(`${API.BASE_URL}/api/paypal/create-order`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({ amount: String(amount), currency })
+                    });
+                    const data = await response.json();
+                    if (!response.ok) throw new Error(data.error || 'Error al crear orden PayPal');
+                    return data.orderID;
+                },
+                // onApprove llama al backend para capturar el pago y activar premium
+                onApprove: async (data) => {
+                    if (typeof showToast === 'function') showToast('Procesando pago...', 'info', 3000);
+                    const response = await fetch(`${API.BASE_URL}/api/paypal/capture-order/${data.orderID}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        }
+                    });
+                    const result = await response.json();
+                    if (!response.ok) throw new Error(result.error || 'Error al capturar pago PayPal');
+
+                    document.getElementById('paypal-modal')?.remove();
+                    this.handleSuccessfulPayment({
+                        method: 'paypal',
+                        transactionId: data.orderID,
+                        amount: amount,
+                        currency: currency
                     });
                 },
                 onError: (err) => {
                     console.error('Error en PayPal:', err);
-                    alert('Error al procesar el pago con PayPal');
+                    if (typeof showToast === 'function') showToast('Error al procesar el pago con PayPal', 'error');
+                    else alert('Error al procesar el pago con PayPal');
+                },
+                onCancel: () => {
+                    if (typeof showToast === 'function') showToast('Pago cancelado', 'info');
                 }
             }).render('#paypal-button-container');
-            
-            */
 
         } catch (error) {
             console.error('Error en PayPal:', error);
-            alert('Error al procesar el pago. Por favor, intenta nuevamente.');
+            if (typeof showToast === 'function') showToast('Error al cargar PayPal. Por favor, intenta nuevamente.', 'error');
+            else alert('Error al procesar el pago. Por favor, intenta nuevamente.');
         }
     },
 
@@ -339,10 +379,10 @@ const Payments = {
     /**
      * Cargar SDK de PayPal dinámicamente
      */
-    loadPayPalSDK() {
+    loadPayPalSDK(currency = 'USD') {
         return new Promise((resolve, reject) => {
             const script = document.createElement('script');
-            script.src = `https://www.paypal.com/sdk/js?client-id=${this.config.paypal.clientId}&currency=USD`;
+            script.src = `https://www.paypal.com/sdk/js?client-id=${this.config.paypal.clientId}&currency=${currency}`;
             script.onload = resolve;
             script.onerror = reject;
             document.head.appendChild(script);
