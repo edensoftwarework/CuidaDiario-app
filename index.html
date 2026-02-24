@@ -62,18 +62,10 @@
         </div>
     </header>
 
-    <!-- Selector de Paciente (solo Premium) -->
+    <!-- Selector de Paciente (visible para todos los usuarios) -->
     <div class="patient-selector-bar" id="patientSelectorBar" style="display: none;">
-        <div class="container patient-selector-content">
-            <div class="patient-selector-left">
-                <span class="patient-selector-label">&#128100; Viendo:</span>
-                <select id="pacienteSelector" onchange="selectPaciente(this.value)" class="patient-dropdown">
-                    <option value="">Todos los pacientes</option>
-                </select>
-            </div>
-            <button class="btn-manage-patients" onclick="openGestionPacientesModal()">
-                &#9881;&#65039; Gestionar Pacientes
-            </button>
+        <div class="container patient-selector-content" id="patientSelectorContent">
+            <!-- Contenido generado dinámicamente según tipo de usuario -->
         </div>
     </div>
 

@@ -1611,6 +1611,94 @@ body {
     display: block;
 }
 
+.patient-name-free {
+    color: white;
+    font-weight: 600;
+    font-size: 0.92rem;
+}
+
+.paciente-relacion-inline {
+    color: #B0BEC5;
+    font-weight: 400;
+    font-size: 0.82rem;
+}
+
+.patient-name-unset {
+    color: #78909C;
+    font-style: italic;
+    font-size: 0.88rem;
+}
+
+.btn-edit-patient-free {
+    background: none;
+    border: 1px solid rgba(255,255,255,0.25);
+    color: #B0BEC5;
+    border-radius: 6px;
+    padding: 3px 8px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    margin-left: 4px;
+    transition: var(--transition);
+}
+
+.btn-edit-patient-free:hover {
+    background: rgba(255,255,255,0.15);
+    color: white;
+}
+
+.btn-add-patient-locked {
+    opacity: 0.75;
+}
+
+.btn-add-patient-locked:hover {
+    opacity: 1;
+    border-color: var(--warning-color);
+    color: var(--warning-color);
+}
+
+.btn-name-patient-cta {
+    background: rgba(76,175,80,0.2) !important;
+    border-color: var(--primary-light) !important;
+    color: var(--primary-light) !important;
+    font-weight: 600;
+}
+
+.btn-name-patient-cta:hover {
+    background: rgba(76,175,80,0.35) !important;
+}
+
+.free-patient-upgrade {
+    text-align: center;
+    padding: 16px 0 4px;
+    border-top: 1px solid var(--border-color);
+    margin-top: 8px;
+}
+
+.btn-upgrade-patients {
+    background: linear-gradient(135deg, #FF9800, #F57C00);
+    color: white;
+    border: none;
+    border-radius: var(--border-radius);
+    padding: 10px 20px;
+    font-size: 0.92rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+    width: 100%;
+}
+
+.btn-upgrade-patients:hover {
+    background: linear-gradient(135deg, #FFB300, #E65100);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
+}
+
+.free-limit-note {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    margin-top: 8px;
+}
+
 /* Responsive patient selector */
 @media (max-width: 600px) {
     .patient-selector-content {

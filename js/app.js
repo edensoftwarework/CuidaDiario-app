@@ -1540,22 +1540,60 @@ async function loadAllSections() {
 
 async function loadPacienteSelector() {
     const bar = document.getElementById('patientSelectorBar');
-    if (!bar) return;
-    if (!Storage.getPremiumStatus()) {
-        bar.style.display = 'none';
-        return;
-    }
+    const contentDiv = document.getElementById('patientSelectorContent');
+    if (!bar || !contentDiv) return;
     bar.style.display = 'flex';
+
+    const isPremium = Storage.getPremiumStatus();
     try {
         const pacientes = await Storage.getPacientes();
-        const selector = document.getElementById('pacienteSelector');
-        const currentId = Storage.currentPacienteId;
-        selector.innerHTML = '<option value="">Todos los pacientes</option>' +
-            pacientes.map(p =>
+
+        if (isPremium) {
+            // Usuario Premium: dropdown con todos los pacientes
+            const currentId = Storage.currentPacienteId;
+            const options = pacientes.map(p =>
                 `<option value="${p.id}" ${String(p.id) === String(currentId) ? 'selected' : ''}>${p.nombre}${p.relacion ? ` (${p.relacion})` : ''}</option>`
             ).join('');
+            contentDiv.innerHTML = `
+                <div class="patient-selector-left">
+                    <span class="patient-selector-label">&#128100; Viendo:</span>
+                    <select id="pacienteSelector" onchange="selectPaciente(this.value)" class="patient-dropdown">
+                        <option value="">Todos los pacientes</option>
+                        ${options}
+                    </select>
+                </div>
+                <button class="btn-manage-patients" onclick="openGestionPacientesModal()">
+                    &#9881;&#65039; Gestionar Pacientes
+                </button>
+            `;
+        } else {
+            // Usuario Free: mostrar nombre del paciente o invitar a nombrarlo
+            const paciente = pacientes[0] || null;
+            if (paciente) {
+                contentDiv.innerHTML = `
+                    <div class="patient-selector-left">
+                        <span class="patient-selector-label">&#128100; Paciente:</span>
+                        <span class="patient-name-free">${paciente.nombre}${paciente.relacion ? ` <span class="paciente-relacion-inline">(${paciente.relacion})</span>` : ''}</span>
+                        <button class="btn-edit-patient-free" onclick="openGestionPacientesModal()" title="Editar nombre del paciente">&#9998;</button>
+                    </div>
+                    <button class="btn-manage-patients btn-add-patient-locked" onclick="showPremiumModal()">
+                        &#128274; Agregar otro paciente
+                    </button>
+                `;
+            } else {
+                contentDiv.innerHTML = `
+                    <div class="patient-selector-left">
+                        <span class="patient-selector-label">&#128100; Paciente:</span>
+                        <span class="patient-name-unset">Sin nombre asignado</span>
+                    </div>
+                    <button class="btn-manage-patients btn-name-patient-cta" onclick="openGestionPacientesModal()">
+                        &#128393; Nombrar a mi paciente
+                    </button>
+                `;
+            }
+        }
     } catch (err) {
-        console.error('Error cargando pacientes:', err);
+        console.error('Error cargando selector de pacientes:', err);
     }
 }
 
@@ -1567,7 +1605,13 @@ async function selectPaciente(value) {
 }
 
 async function openGestionPacientesModal() {
-    document.getElementById('gestionPacientesModal').classList.add('active');
+    const modal = document.getElementById('gestionPacientesModal');
+    const isPremium = Storage.getPremiumStatus();
+    const titleEl = modal.querySelector('.modal-header h3');
+    if (titleEl) {
+        titleEl.innerHTML = isPremium ? '&#128100; Gestión de Pacientes' : '&#128100; Mi Paciente';
+    }
+    modal.classList.add('active');
     await loadPacientesList();
 }
 
@@ -1580,6 +1624,7 @@ async function loadPacientesList() {
     const formContainer = document.getElementById('pacienteFormContainer');
     formContainer.style.display = 'none';
     container.style.display = 'block';
+    const isPremium = Storage.getPremiumStatus();
     try {
         const pacientes = await Storage.getPacientes();
         let html = '';
@@ -1589,7 +1634,7 @@ async function loadPacientesList() {
             html = '<div class="pacientes-list">' + pacientes.map(p => `
                 <div class="paciente-item">
                     <div class="paciente-info">
-                        <div class="paciente-avatar">👤</div>
+                        <div class="paciente-avatar">&#128100;</div>
                         <div class="paciente-details">
                             <strong>${p.nombre}</strong>
                             ${p.relacion ? `<span class="paciente-relacion">${p.relacion}</span>` : ''}
@@ -1597,15 +1642,31 @@ async function loadPacientesList() {
                         </div>
                     </div>
                     <div class="item-actions">
-                        <button class="btn-icon" onclick="editPaciente(${p.id})" title="Editar">✏️</button>
-                        <button class="btn-icon" onclick="deletePaciente(${p.id})" title="Eliminar">🗑️</button>
+                        <button class="btn-icon" onclick="editPaciente(${p.id})" title="Editar">&#9999;&#65039;</button>
+                        ${isPremium ? `<button class="btn-icon" onclick="deletePaciente(${p.id})" title="Eliminar">&#128465;&#65039;</button>` : ''}
                     </div>
                 </div>
             `).join('') + '</div>';
         }
-        html += `<div style="padding: 16px 0 4px; text-align: center;">
-            <button class="btn-primary" onclick="openPacienteForm()">+ Agregar Paciente</button>
-        </div>`;
+
+        if (isPremium) {
+            html += `<div style="padding: 16px 0 4px; text-align: center;">
+                <button class="btn-primary" onclick="openPacienteForm()">+ Agregar Paciente</button>
+            </div>`;
+        } else if (pacientes.length === 0) {
+            // Free sin paciente: invitar a crear el primero
+            html += `<div style="padding: 16px 0 4px; text-align: center;">
+                <button class="btn-primary" onclick="openPacienteForm()">+ Nombrar mi paciente</button>
+            </div>`;
+        } else {
+            // Free con 1 paciente: mostrar upgrade prompt
+            html += `<div class="free-patient-upgrade">
+                <button class="btn-upgrade-patients" onclick="closeGestionPacientesModal(); showPremiumModal();">
+                    &#128274; Agregar otro paciente &mdash; Premium
+                </button>
+                <p class="free-limit-note">La versión gratuita incluye solo 1 paciente.</p>
+            </div>`;
+        }
         container.innerHTML = html;
     } catch (err) {
         container.innerHTML = '<p class="empty-state">Error al cargar pacientes</p>';
@@ -1613,8 +1674,15 @@ async function loadPacientesList() {
 }
 
 function openPacienteForm(paciente = null) {
+    const isPremium = Storage.getPremiumStatus();
     document.getElementById('pacientesListContainer').style.display = 'none';
-    document.getElementById('pacienteFormTitle').textContent = paciente ? 'Editar Paciente' : 'Agregar Paciente';
+    let title;
+    if (paciente) {
+        title = isPremium ? 'Editar Paciente' : 'Editar nombre del paciente';
+    } else {
+        title = isPremium ? 'Agregar Paciente' : 'Nombrar mi paciente';
+    }
+    document.getElementById('pacienteFormTitle').textContent = title;
     document.getElementById('pacienteForm').reset();
     document.getElementById('pacienteId').value = '';
     if (paciente) {
