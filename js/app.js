@@ -15,6 +15,9 @@ async function initApp() {
     updatePremiumStatus();
     setupNavigation();
     setupEventListeners();
+
+    // Cargar selector de pacientes (solo premium)
+    await loadPacienteSelector();
     
     // Cargar datos iniciales
     await loadDashboard();
@@ -1533,6 +1536,148 @@ async function loadAllSections() {
     loadReportes();
 }
 
+// ========== GESTIÓN DE PACIENTES ==========
+
+async function loadPacienteSelector() {
+    const bar = document.getElementById('patientSelectorBar');
+    if (!bar) return;
+    if (!Storage.getPremiumStatus()) {
+        bar.style.display = 'none';
+        return;
+    }
+    bar.style.display = 'flex';
+    try {
+        const pacientes = await Storage.getPacientes();
+        const selector = document.getElementById('pacienteSelector');
+        const currentId = Storage.currentPacienteId;
+        selector.innerHTML = '<option value="">Todos los pacientes</option>' +
+            pacientes.map(p =>
+                `<option value="${p.id}" ${String(p.id) === String(currentId) ? 'selected' : ''}>${p.nombre}${p.relacion ? ` (${p.relacion})` : ''}</option>`
+            ).join('');
+    } catch (err) {
+        console.error('Error cargando pacientes:', err);
+    }
+}
+
+async function selectPaciente(value) {
+    Storage.currentPacienteId = value ? parseInt(value) : null;
+    const activeSection = document.querySelector('.section.active');
+    if (activeSection) await navigateToSection(activeSection.id);
+    await loadDashboard();
+}
+
+async function openGestionPacientesModal() {
+    document.getElementById('gestionPacientesModal').classList.add('active');
+    await loadPacientesList();
+}
+
+function closeGestionPacientesModal() {
+    document.getElementById('gestionPacientesModal').classList.remove('active');
+}
+
+async function loadPacientesList() {
+    const container = document.getElementById('pacientesListContainer');
+    const formContainer = document.getElementById('pacienteFormContainer');
+    formContainer.style.display = 'none';
+    container.style.display = 'block';
+    try {
+        const pacientes = await Storage.getPacientes();
+        let html = '';
+        if (pacientes.length === 0) {
+            html = '<p class="empty-state" style="padding: 20px 0;">No tienes pacientes registrados aún.</p>';
+        } else {
+            html = '<div class="pacientes-list">' + pacientes.map(p => `
+                <div class="paciente-item">
+                    <div class="paciente-info">
+                        <div class="paciente-avatar">👤</div>
+                        <div class="paciente-details">
+                            <strong>${p.nombre}</strong>
+                            ${p.relacion ? `<span class="paciente-relacion">${p.relacion}</span>` : ''}
+                            ${p.fecha_nacimiento ? `<span class="paciente-fecha">${formatDate(p.fecha_nacimiento)}</span>` : ''}
+                        </div>
+                    </div>
+                    <div class="item-actions">
+                        <button class="btn-icon" onclick="editPaciente(${p.id})" title="Editar">✏️</button>
+                        <button class="btn-icon" onclick="deletePaciente(${p.id})" title="Eliminar">🗑️</button>
+                    </div>
+                </div>
+            `).join('') + '</div>';
+        }
+        html += `<div style="padding: 16px 0 4px; text-align: center;">
+            <button class="btn-primary" onclick="openPacienteForm()">+ Agregar Paciente</button>
+        </div>`;
+        container.innerHTML = html;
+    } catch (err) {
+        container.innerHTML = '<p class="empty-state">Error al cargar pacientes</p>';
+    }
+}
+
+function openPacienteForm(paciente = null) {
+    document.getElementById('pacientesListContainer').style.display = 'none';
+    document.getElementById('pacienteFormTitle').textContent = paciente ? 'Editar Paciente' : 'Agregar Paciente';
+    document.getElementById('pacienteForm').reset();
+    document.getElementById('pacienteId').value = '';
+    if (paciente) {
+        document.getElementById('pacienteId').value = paciente.id;
+        document.getElementById('pacienteNombre').value = paciente.nombre || '';
+        document.getElementById('pacienteRelacion').value = paciente.relacion || '';
+        document.getElementById('pacienteFechaNacimiento').value =
+            paciente.fecha_nacimiento ? String(paciente.fecha_nacimiento).substring(0, 10) : '';
+        document.getElementById('pacienteNotas').value = paciente.notas || '';
+    }
+    document.getElementById('pacienteFormContainer').style.display = 'block';
+}
+
+function closePacienteForm() {
+    document.getElementById('pacienteFormContainer').style.display = 'none';
+    document.getElementById('pacientesListContainer').style.display = 'block';
+}
+
+async function editPaciente(id) {
+    const pacientes = await Storage.getPacientes();
+    const paciente = pacientes.find(p => p.id === id);
+    if (paciente) openPacienteForm(paciente);
+}
+
+async function deletePaciente(id) {
+    if (!confirm('¿Eliminar este paciente? Se perderá el vínculo con sus registros.')) return;
+    try {
+        await Storage.deletePaciente(id);
+        if (Storage.currentPacienteId === id) {
+            Storage.currentPacienteId = null;
+            const sel = document.getElementById('pacienteSelector');
+            if (sel) sel.value = '';
+        }
+        await loadPacienteSelector();
+        await loadPacientesList();
+        await loadDashboard();
+    } catch (err) {
+        // Error shown by storage
+    }
+}
+
+async function savePaciente(event) {
+    event.preventDefault();
+    const id = document.getElementById('pacienteId').value;
+    const data = {
+        nombre: document.getElementById('pacienteNombre').value.trim(),
+        relacion: document.getElementById('pacienteRelacion').value || null,
+        fecha_nacimiento: document.getElementById('pacienteFechaNacimiento').value || null,
+        notas: document.getElementById('pacienteNotas').value.trim() || null
+    };
+    try {
+        if (id) {
+            await Storage.updatePaciente(id, data);
+        } else {
+            await Storage.addPaciente(data);
+        }
+        await loadPacienteSelector();
+        await loadPacientesList();
+    } catch (err) {
+        // Error shown by storage
+    }
+}
+
 // ========== EXPORTAR FUNCIONES GLOBALES ==========
 // Estas funciones deben estar disponibles desde HTML
 window.navigateToSection = navigateToSection;
@@ -1578,6 +1723,15 @@ window.closePremiumModal = closePremiumModal;
 window.confirmarBorrarDatos = confirmarBorrarDatos;
 window.closeWelcomeBanner = closeWelcomeBanner;
 window.updatePremiumStatus = updatePremiumStatus;
+window.loadPacienteSelector = loadPacienteSelector;
+window.selectPaciente = selectPaciente;
+window.openGestionPacientesModal = openGestionPacientesModal;
+window.closeGestionPacientesModal = closeGestionPacientesModal;
+window.openPacienteForm = openPacienteForm;
+window.closePacienteForm = closePacienteForm;
+window.savePaciente = savePaciente;
+window.editPaciente = editPaciente;
+window.deletePaciente = deletePaciente;
 
 
 

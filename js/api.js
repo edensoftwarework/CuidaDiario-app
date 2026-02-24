@@ -108,10 +108,11 @@ const API = {
     
     // ==================== MEDICAMENTOS ====================
     
-    async getMedicamentos() {
-        const response = await fetch(`${this.BASE_URL}/api/medicamentos`, {
-            headers: this.getHeaders()
-        });
+    async getMedicamentos(paciente_id = null) {
+        const url = paciente_id
+            ? `${this.BASE_URL}/api/medicamentos?paciente_id=${paciente_id}`
+            : `${this.BASE_URL}/api/medicamentos`;
+        const response = await fetch(url, { headers: this.getHeaders() });
         return this.handleResponse(response);
     },
     
@@ -150,10 +151,11 @@ const API = {
     
     // ==================== CITAS ====================
     
-    async getCitas() {
-        const response = await fetch(`${this.BASE_URL}/api/citas`, {
-            headers: this.getHeaders()
-        });
+    async getCitas(paciente_id = null) {
+        const url = paciente_id
+            ? `${this.BASE_URL}/api/citas?paciente_id=${paciente_id}`
+            : `${this.BASE_URL}/api/citas`;
+        const response = await fetch(url, { headers: this.getHeaders() });
         return this.handleResponse(response);
     },
     
@@ -192,10 +194,11 @@ const API = {
     
     // ==================== TAREAS ====================
     
-    async getTareas() {
-        const response = await fetch(`${this.BASE_URL}/api/tareas`, {
-            headers: this.getHeaders()
-        });
+    async getTareas(paciente_id = null) {
+        const url = paciente_id
+            ? `${this.BASE_URL}/api/tareas?paciente_id=${paciente_id}`
+            : `${this.BASE_URL}/api/tareas`;
+        const response = await fetch(url, { headers: this.getHeaders() });
         return this.handleResponse(response);
     },
     
@@ -234,10 +237,11 @@ const API = {
     
     // ==================== SÍNTOMAS ====================
     
-    async getSintomas() {
-        const response = await fetch(`${this.BASE_URL}/api/sintomas`, {
-            headers: this.getHeaders()
-        });
+    async getSintomas(paciente_id = null) {
+        const url = paciente_id
+            ? `${this.BASE_URL}/api/sintomas?paciente_id=${paciente_id}`
+            : `${this.BASE_URL}/api/sintomas`;
+        const response = await fetch(url, { headers: this.getHeaders() });
         return this.handleResponse(response);
     },
     
@@ -276,10 +280,11 @@ const API = {
     
     // ==================== CONTACTOS ====================
     
-    async getContactos() {
-        const response = await fetch(`${this.BASE_URL}/api/contactos`, {
-            headers: this.getHeaders()
-        });
+    async getContactos(paciente_id = null) {
+        const url = paciente_id
+            ? `${this.BASE_URL}/api/contactos?paciente_id=${paciente_id}`
+            : `${this.BASE_URL}/api/contactos`;
+        const response = await fetch(url, { headers: this.getHeaders() });
         return this.handleResponse(response);
     },
     
@@ -318,10 +323,11 @@ const API = {
 
     // ==================== SIGNOS VITALES ====================
 
-    async getSignosVitales() {
-        const response = await fetch(`${this.BASE_URL}/api/signos-vitales`, {
-            headers: this.getHeaders()
-        });
+    async getSignosVitales(paciente_id = null) {
+        const url = paciente_id
+            ? `${this.BASE_URL}/api/signos-vitales?paciente_id=${paciente_id}`
+            : `${this.BASE_URL}/api/signos-vitales`;
+        const response = await fetch(url, { headers: this.getHeaders() });
         return this.handleResponse(response);
     },
 
@@ -344,10 +350,11 @@ const API = {
 
     // ==================== HISTORIAL MEDICAMENTOS ====================
 
-    async getHistorialMedicamentos() {
-        const response = await fetch(`${this.BASE_URL}/api/historial-medicamentos`, {
-            headers: this.getHeaders()
-        });
+    async getHistorialMedicamentos(paciente_id = null) {
+        const url = paciente_id
+            ? `${this.BASE_URL}/api/historial-medicamentos?paciente_id=${paciente_id}`
+            : `${this.BASE_URL}/api/historial-medicamentos`;
+        const response = await fetch(url, { headers: this.getHeaders() });
         return this.handleResponse(response);
     },
 
@@ -358,7 +365,43 @@ const API = {
             body: JSON.stringify(data)
         });
         return this.handleResponse(response);
+    },
+
+    // ==================== PACIENTES ====================
+
+    async getPacientes() {
+        const response = await fetch(`${this.BASE_URL}/api/pacientes`, {
+            headers: this.getHeaders()
+        });
+        return this.handleResponse(response);
+    },
+
+    async createPaciente(data) {
+        const response = await fetch(`${this.BASE_URL}/api/pacientes`, {
+            method: 'POST',
+            headers: this.getHeaders(),
+            body: JSON.stringify(data)
+        });
+        return this.handleResponse(response);
+    },
+
+    async updatePaciente(id, data) {
+        const response = await fetch(`${this.BASE_URL}/api/pacientes/${id}`, {
+            method: 'PUT',
+            headers: this.getHeaders(),
+            body: JSON.stringify(data)
+        });
+        return this.handleResponse(response);
+    },
+
+    async deletePaciente(id) {
+        const response = await fetch(`${this.BASE_URL}/api/pacientes/${id}`, {
+            method: 'DELETE',
+            headers: this.getHeaders()
+        });
+        return this.handleResponse(response);
     }
 };
+
 
 

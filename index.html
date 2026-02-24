@@ -62,6 +62,21 @@
         </div>
     </header>
 
+    <!-- Selector de Paciente (solo Premium) -->
+    <div class="patient-selector-bar" id="patientSelectorBar" style="display: none;">
+        <div class="container patient-selector-content">
+            <div class="patient-selector-left">
+                <span class="patient-selector-label">&#128100; Viendo:</span>
+                <select id="pacienteSelector" onchange="selectPaciente(this.value)" class="patient-dropdown">
+                    <option value="">Todos los pacientes</option>
+                </select>
+            </div>
+            <button class="btn-manage-patients" onclick="openGestionPacientesModal()">
+                &#9881;&#65039; Gestionar Pacientes
+            </button>
+        </div>
+    </div>
+
     <!-- Contenedor principal -->
     <main class="main-content">
         <div class="container">
@@ -722,6 +737,57 @@
         </div>
     </div>
 
+    <!-- Modal: Gestión de Pacientes -->
+    <div id="gestionPacientesModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>&#128100; Gestión de Pacientes</h3>
+                <button class="modal-close" onclick="closeGestionPacientesModal()">&times;</button>
+            </div>
+            <!-- Lista de pacientes -->
+            <div id="pacientesListContainer">
+                <p class="empty-state" style="padding: 20px 0;">Cargando...</p>
+            </div>
+            <!-- Formulario de paciente -->
+            <div id="pacienteFormContainer" style="display: none;">
+                <h4 id="pacienteFormTitle" style="margin-bottom: 16px; color: var(--text-primary);">Agregar Paciente</h4>
+                <form id="pacienteForm" onsubmit="savePaciente(event)">
+                    <input type="hidden" id="pacienteId">
+                    <div class="form-group">
+                        <label for="pacienteNombre">Nombre completo *</label>
+                        <input type="text" id="pacienteNombre" required placeholder="Ej: María García">
+                    </div>
+                    <div class="form-group">
+                        <label for="pacienteRelacion">Relación</label>
+                        <select id="pacienteRelacion">
+                            <option value="">Selecciona...</option>
+                            <option value="Madre">Madre</option>
+                            <option value="Padre">Padre</option>
+                            <option value="Abuela">Abuela</option>
+                            <option value="Abuelo">Abuelo</option>
+                            <option value="Hijo/a">Hijo/a</option>
+                            <option value="Hermano/a">Hermano/a</option>
+                            <option value="Cónyuge">Cónyuge</option>
+                            <option value="Otro">Otro</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="pacienteFechaNacimiento">Fecha de nacimiento</label>
+                        <input type="date" id="pacienteFechaNacimiento">
+                    </div>
+                    <div class="form-group">
+                        <label for="pacienteNotas">Notas</label>
+                        <textarea id="pacienteNotas" rows="2" placeholder="Diagnósticos, alergias u otra información relevante..."></textarea>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn-secondary" onclick="closePacienteForm()">Cancelar</button>
+                        <button type="submit" class="btn-primary">Guardar Paciente</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal: Premium -->
     <div id="premiumModal" class="modal">
         <div class="modal-content modal-premium">
@@ -733,14 +799,15 @@
                 <div class="premium-benefits">
                     <h4>Beneficios Premium:</h4>
                     <ul>
-                        <li>✓ Medicamentos y tareas <strong>ilimitados</strong></li>
-                        <li>✓ Citas médicas sin límites</li>
-                        <li>✓ Historial completo y reportes exportables</li>
-                        <li>✓ Seguimiento avanzado de síntomas y signos vitales</li>
-                        <li>✓ Agenda de contactos ampliada</li>
-                        <li>✓ Exportación e importación de datos</li>
-                        <li>✓ Gráficas y análisis de tendencias</li>
-                        <li>✓ Soporte prioritario</li>
+                        <li>&#10003; <strong>Múltiples pacientes</strong> — gestiona a toda tu familia</li>
+                        <li>&#10003; Medicamentos y tareas <strong>ilimitados</strong></li>
+                        <li>&#10003; Citas médicas sin límites</li>
+                        <li>&#10003; Historial completo y reportes exportables</li>
+                        <li>&#10003; Seguimiento avanzado de síntomas y signos vitales</li>
+                        <li>&#10003; Agenda de contactos ampliada</li>
+                        <li>&#10003; Exportación e importación de datos</li>
+                        <li>&#10003; Gráficas y análisis de tendencias</li>
+                        <li>&#10003; Soporte prioritario</li>
                     </ul>
                 </div>
                 <div class="premium-pricing">

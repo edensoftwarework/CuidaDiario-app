@@ -1475,6 +1475,161 @@ body {
 }
 
 /* ===========================================
+   SELECTOR DE PACIENTE (PREMIUM)
+   =========================================== */
+.patient-selector-bar {
+    background: linear-gradient(135deg, #1a237e, #283593);
+    border-bottom: 2px solid var(--primary-light);
+    padding: 10px 0;
+    position: sticky;
+    top: var(--header-height);
+    z-index: 900;
+}
+
+.patient-selector-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.patient-selector-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.patient-selector-label {
+    color: #B0BEC5;
+    font-size: 0.85rem;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.patient-dropdown {
+    background: rgba(255,255,255,0.1);
+    color: white;
+    border: 1px solid rgba(255,255,255,0.3);
+    border-radius: var(--border-radius);
+    padding: 6px 12px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    min-width: 180px;
+    max-width: 260px;
+}
+
+.patient-dropdown:focus {
+    outline: none;
+    border-color: var(--primary-light);
+    background: rgba(255,255,255,0.15);
+}
+
+.patient-dropdown option {
+    background: #283593;
+    color: white;
+}
+
+.btn-manage-patients {
+    background: rgba(255,255,255,0.12);
+    color: #B0BEC5;
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: var(--border-radius);
+    padding: 6px 14px;
+    font-size: 0.82rem;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: var(--transition);
+}
+
+.btn-manage-patients:hover {
+    background: rgba(255,255,255,0.22);
+    color: white;
+    border-color: var(--primary-light);
+}
+
+/* ===========================================
+   GESTIÓN DE PACIENTES (MODAL)
+   =========================================== */
+.pacientes-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 4px 0 12px;
+}
+
+.paciente-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: var(--bg-secondary);
+    border-radius: var(--border-radius);
+    border: 1px solid var(--border-color);
+    transition: var(--transition);
+}
+
+.paciente-item:hover {
+    border-color: var(--primary-light);
+    background: #f1f8e9;
+}
+
+.paciente-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.paciente-avatar {
+    font-size: 1.8rem;
+    line-height: 1;
+}
+
+.paciente-details {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.paciente-details strong {
+    font-size: 0.95rem;
+    color: var(--text-primary);
+}
+
+.paciente-relacion {
+    font-size: 0.8rem;
+    color: var(--primary-dark);
+    background: #e8f5e9;
+    padding: 1px 8px;
+    border-radius: 12px;
+    display: inline-block;
+    font-weight: 500;
+}
+
+.paciente-fecha {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    display: block;
+}
+
+/* Responsive patient selector */
+@media (max-width: 600px) {
+    .patient-selector-content {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+    .patient-dropdown {
+        min-width: 140px;
+        max-width: 100%;
+        width: 100%;
+    }
+    .btn-manage-patients {
+        width: 100%;
+        text-align: center;
+    }
+}
+
+/* ===========================================
    UTILIDADES DE IMPRESIÓN
    =========================================== */
 @media print {

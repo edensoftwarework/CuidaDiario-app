@@ -7,6 +7,9 @@
  */
 
 const Storage = {
+    // Paciente actualmente seleccionado (null = todos)
+    currentPacienteId: null,
+
     // Claves de almacenamiento local
     KEYS: {
         PREMIUM_STATUS: 'cuidadiario_premium',
@@ -63,7 +66,7 @@ const Storage = {
     // ========== MEDICAMENTOS (API) ==========
     async getMedicamentos() {
         try {
-            return await API.getMedicamentos();
+            return await API.getMedicamentos(this.currentPacienteId);
         } catch (error) {
             console.error('Error:', error);
             return [];
@@ -72,6 +75,7 @@ const Storage = {
 
     async addMedicamento(medicamento) {
         try {
+            if (this.currentPacienteId) medicamento = { ...medicamento, paciente_id: this.currentPacienteId };
             return await API.createMedicamento(medicamento);
         } catch (error) {
             console.error('Error:', error);
@@ -103,7 +107,7 @@ const Storage = {
     // ========== CITAS (API) ==========
     async getCitas() {
         try {
-            return await API.getCitas();
+            return await API.getCitas(this.currentPacienteId);
         } catch (error) {
             console.error('Error:', error);
             return [];
@@ -112,6 +116,7 @@ const Storage = {
 
     async addCita(cita) {
         try {
+            if (this.currentPacienteId) cita = { ...cita, paciente_id: this.currentPacienteId };
             return await API.createCita(cita);
         } catch (error) {
             console.error('Error:', error);
@@ -143,7 +148,7 @@ const Storage = {
     // ========== TAREAS (API) ==========
     async getTareas() {
         try {
-            return await API.getTareas();
+            return await API.getTareas(this.currentPacienteId);
         } catch (error) {
             console.error('Error:', error);
             return [];
@@ -152,6 +157,7 @@ const Storage = {
 
     async addTarea(tarea) {
         try {
+            if (this.currentPacienteId) tarea = { ...tarea, paciente_id: this.currentPacienteId };
             return await API.createTarea(tarea);
         } catch (error) {
             console.error('Error:', error);
@@ -183,7 +189,7 @@ const Storage = {
     // ========== SÍNTOMAS (API) ==========
     async getSintomas() {
         try {
-            return await API.getSintomas();
+            return await API.getSintomas(this.currentPacienteId);
         } catch (error) {
             console.error('Error:', error);
             return [];
@@ -192,6 +198,7 @@ const Storage = {
 
     async addSintoma(sintoma) {
         try {
+            if (this.currentPacienteId) sintoma = { ...sintoma, paciente_id: this.currentPacienteId };
             return await API.createSintoma(sintoma);
         } catch (error) {
             console.error('Error:', error);
@@ -213,7 +220,7 @@ const Storage = {
     // ========== CONTACTOS (API) ==========
     async getContactos() {
         try {
-            return await API.getContactos();
+            return await API.getContactos(this.currentPacienteId);
         } catch (error) {
             console.error('Error:', error);
             return [];
@@ -222,6 +229,7 @@ const Storage = {
 
     async addContacto(contacto) {
         try {
+            if (this.currentPacienteId) contacto = { ...contacto, paciente_id: this.currentPacienteId };
             return await API.createContacto(contacto);
         } catch (error) {
             console.error('Error:', error);
@@ -254,7 +262,7 @@ const Storage = {
     // ========== HISTORIAL MEDICAMENTOS (API) ==========
     async getHistorialMedicamentos() {
         try {
-            return await API.getHistorialMedicamentos();
+            return await API.getHistorialMedicamentos(this.currentPacienteId);
         } catch (error) {
             console.error('Error:', error);
             return [];
@@ -263,6 +271,7 @@ const Storage = {
 
     async addHistorialMedicamento(registro) {
         try {
+            if (this.currentPacienteId) registro = { ...registro, paciente_id: this.currentPacienteId };
             return await API.createHistorialMedicamento(registro);
         } catch (error) {
             console.error('Error:', error);
@@ -272,7 +281,7 @@ const Storage = {
     // ========== SIGNOS VITALES (API) ==========
     async getSignosVitales() {
         try {
-            return await API.getSignosVitales();
+            return await API.getSignosVitales(this.currentPacienteId);
         } catch (error) {
             console.error('Error:', error);
             return [];
@@ -281,6 +290,7 @@ const Storage = {
 
     async addSignoVital(signo) {
         try {
+            if (this.currentPacienteId) signo = { ...signo, paciente_id: this.currentPacienteId };
             return await API.createSignoVital(signo);
         } catch (error) {
             console.error('Error:', error);
@@ -295,6 +305,46 @@ const Storage = {
         } catch (error) {
             console.error('Error:', error);
             alert('Error al eliminar: ' + error.message);
+            throw error;
+        }
+    },
+
+    // ========== PACIENTES (API) ==========
+    async getPacientes() {
+        try {
+            return await API.getPacientes();
+        } catch (error) {
+            console.error('Error:', error);
+            return [];
+        }
+    },
+
+    async addPaciente(paciente) {
+        try {
+            return await API.createPaciente(paciente);
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Error al guardar paciente: ' + error.message);
+            throw error;
+        }
+    },
+
+    async updatePaciente(id, updates) {
+        try {
+            return await API.updatePaciente(id, updates);
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Error al actualizar paciente: ' + error.message);
+            throw error;
+        }
+    },
+
+    async deletePaciente(id) {
+        try {
+            return await API.deletePaciente(id);
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Error al eliminar paciente: ' + error.message);
             throw error;
         }
     },
