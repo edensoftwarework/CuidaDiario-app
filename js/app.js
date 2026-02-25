@@ -359,21 +359,20 @@ async function loadMedicamentos() {
 }
 
 async function loadHistorialMedicamentos() {
-    if (!Storage.getPremiumStatus()) {
-        document.getElementById('medHistorial').style.display = 'none';
-        return;
-    }
-    
+    const isPremium = Storage.getPremiumStatus();
+    const LIMIT_FREE = 5;
+    const LIMIT_PREMIUM = 50;
+
     document.getElementById('medHistorial').style.display = 'block';
     const historialData = await Storage.getHistorialMedicamentos();
-    const historial = historialData.slice(0, 50);
+    const historial = historialData.slice(0, isPremium ? LIMIT_PREMIUM : LIMIT_FREE);
     const container = document.getElementById('medHistorialList');
-    
+
     if (historial.length === 0) {
         container.innerHTML = '<p class="empty-state">No hay registros de administración</p>';
         return;
     }
-    
+
     container.innerHTML = historial.map(h => `
         <div class="historial-item">
             <div class="historial-info">
@@ -383,6 +382,14 @@ async function loadHistorialMedicamentos() {
             <div class="historial-fecha">${formatDate(h.fecha)}</div>
         </div>
     `).join('');
+
+    // Si es free y hay más registros de los que se muestran, avisar
+    if (!isPremium && historialData.length > LIMIT_FREE) {
+        container.innerHTML += `
+            <div class="locked-data-banner" style="margin-top:10px;" onclick="showPremiumModal()">
+                🔒 Hay ${historialData.length - LIMIT_FREE} registros más. <span style="text-decoration:underline;cursor:pointer;">Hazte Premium</span> para ver el historial completo.
+            </div>`;
+    }
 }
 
 function formatFrecuenciaMed(med) {
