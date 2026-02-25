@@ -105,6 +105,25 @@ const API = {
         this.removeToken();
         window.location.href = 'login.html';
     },
+
+    // Recargar datos del usuario desde el backend y actualizar localStorage
+    async refreshUser() {
+        try {
+            const response = await fetch(`${this.BASE_URL}/api/me`, {
+                headers: this.getHeaders()
+            });
+            if (!response.ok) return null;
+            const data = await response.json();
+            if (data.usuario) {
+                this.setUser(data.usuario);
+                return data.usuario;
+            }
+            return null;
+        } catch (err) {
+            console.warn('No se pudo recargar el usuario:', err);
+            return null;
+        }
+    },
     
     // ==================== MEDICAMENTOS ====================
     

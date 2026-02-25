@@ -443,10 +443,10 @@ const Storage = {
         if (isPremium) {
             return {
                 premium: true,
-                medicamentos: { current: 999, max: 999, exceeded: false },
-                citas: { current: 999, max: 999, exceeded: false },
-                tareas: { current: 999, max: 999, exceeded: false },
-                contactos: { current: 999, max: 999, exceeded: false }
+                medicamentos: { current: 999, max: 999, exceeded: false, locked: 0 },
+                citas: { current: 999, max: 999, exceeded: false, locked: 0 },
+                tareas: { current: 999, max: 999, exceeded: false, locked: 0 },
+                contactos: { current: 999, max: 999, exceeded: false, locked: 0 }
             };
         }
 
@@ -457,27 +457,33 @@ const Storage = {
             this.getContactos()
         ]);
 
+        const FREE = { medicamentos: 3, citas: 3, tareas: 3, contactos: 1 };
+
         return {
             premium: false,
             medicamentos: {
                 current: medicamentos.length,
-                max: 3,
-                exceeded: medicamentos.length >= 3
+                max: FREE.medicamentos,
+                exceeded: medicamentos.length >= FREE.medicamentos,
+                locked: Math.max(0, medicamentos.length - FREE.medicamentos)
             },
             citas: {
                 current: citas.length,
-                max: 3,
-                exceeded: citas.length >= 3
+                max: FREE.citas,
+                exceeded: citas.length >= FREE.citas,
+                locked: Math.max(0, citas.length - FREE.citas)
             },
             tareas: {
                 current: tareas.length,
-                max: 3,
-                exceeded: tareas.length >= 3
+                max: FREE.tareas,
+                exceeded: tareas.length >= FREE.tareas,
+                locked: Math.max(0, tareas.length - FREE.tareas)
             },
             contactos: {
                 current: contactos.length,
-                max: 1,
-                exceeded: contactos.length >= 1
+                max: FREE.contactos,
+                exceeded: contactos.length >= FREE.contactos,
+                locked: Math.max(0, contactos.length - FREE.contactos)
             }
         };
     },

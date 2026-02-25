@@ -541,6 +541,34 @@ body {
     font-weight: 600;
 }
 
+/* Banner de datos bloqueados (al bajar de Premium) */
+.locked-data-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: linear-gradient(135deg, #FFF8E1 0%, #FFF3CD 100%);
+    color: #856404;
+    padding: 12px 18px;
+    border-radius: var(--border-radius);
+    margin-bottom: 16px;
+    border: 1px solid #FFD54F;
+    border-left: 4px solid #FFC107;
+    font-size: 0.92rem;
+    line-height: 1.5;
+}
+
+.locked-data-banner .locked-icon {
+    font-size: 1.1rem;
+    flex-shrink: 0;
+}
+
+.locked-data-banner a {
+    color: var(--primary-color);
+    font-weight: 700;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
 /* ===========================================
    PREMIUM FEATURES
    =========================================== */

@@ -11,6 +11,9 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 async function initApp() {
+    // Recargar estado premium desde el backend (captura cancelaciones via webhook)
+    await API.refreshUser();
+
     // Inicializar estado de la app
     updatePremiumStatus();
     setupNavigation();
@@ -286,13 +289,33 @@ async function loadMedicamentos() {
     } else {
         warning.style.display = 'none';
     }
+
+    // Mostrar banner de datos bloqueados si bajó de premium y tiene más de 3
+    const lockedBanner = document.getElementById('medLockedBanner');
+    if (lockedBanner) {
+        if (!limits.premium && limits.medicamentos.locked > 0) {
+            lockedBanner.style.display = 'block';
+            lockedBanner.innerHTML = `
+                <span class="locked-icon">🔒</span>
+                Tienes <strong>${limits.medicamentos.locked}</strong> medicamento${limits.medicamentos.locked > 1 ? 's' : ''} bloqueado${limits.medicamentos.locked > 1 ? 's' : ''}.
+                <a href="#" onclick="showPremiumModal(); return false;">Vuelve a Premium</a> para acceder a todos tus datos.
+            `;
+        } else {
+            lockedBanner.style.display = 'none';
+        }
+    }
     
     if (medicamentos.length === 0) {
         container.innerHTML = '<p class="empty-state">No hay medicamentos registrados. Haz clic en "Agregar Medicamento" para comenzar.</p>';
         return;
     }
-    
-    container.innerHTML = medicamentos.map(med => `
+
+    // Si es free y tiene más del límite, mostrar solo los primeros 3
+    const visibles = (!limits.premium && medicamentos.length > limits.medicamentos.max)
+        ? medicamentos.slice(0, limits.medicamentos.max)
+        : medicamentos;
+
+    container.innerHTML = visibles.map(med => `
         <div class="item-card">
             <div class="item-header">
                 <div>
@@ -497,6 +520,21 @@ async function loadCitas() {
     if (warning) {
         warning.style.display = (!limits.premium && limits.citas.exceeded) ? 'block' : 'none';
     }
+
+    // Banner de datos bloqueados
+    const lockedBanner = document.getElementById('citasLockedBanner');
+    if (lockedBanner) {
+        if (!limits.premium && limits.citas.locked > 0) {
+            lockedBanner.style.display = 'block';
+            lockedBanner.innerHTML = `
+                <span class="locked-icon">🔒</span>
+                Tienes <strong>${limits.citas.locked}</strong> cita${limits.citas.locked > 1 ? 's' : ''} bloqueada${limits.citas.locked > 1 ? 's' : ''}.
+                <a href="#" onclick="showPremiumModal(); return false;">Vuelve a Premium</a> para acceder a todas.
+            `;
+        } else {
+            lockedBanner.style.display = 'none';
+        }
+    }
     await renderCalendar();
     await renderCitasList();
 }
@@ -573,7 +611,12 @@ function selectCalendarDate(dateStr) {
 }
 
 async function renderCitasList(filter = 'todas') {
-    const citas = await Storage.getCitas();
+    const allCitas = await Storage.getCitas();
+    const limits = await Storage.checkLimits();
+    // Si es free y tiene más del límite, mostrar solo las primeras
+    const citas = (!limits.premium && allCitas.length > limits.citas.max)
+        ? allCitas.slice(0, limits.citas.max)
+        : allCitas;
     const container = document.getElementById('citasList');
     const now = new Date();
     
@@ -1054,8 +1097,28 @@ async function loadTareas(filter = 'todas') {
     } else {
         warning.style.display = 'none';
     }
+
+    // Banner de datos bloqueados
+    const lockedBanner = document.getElementById('tareasLockedBanner');
+    if (lockedBanner) {
+        if (!limits.premium && limits.tareas.locked > 0) {
+            lockedBanner.style.display = 'block';
+            lockedBanner.innerHTML = `
+                <span class="locked-icon">🔒</span>
+                Tienes <strong>${limits.tareas.locked}</strong> tarea${limits.tareas.locked > 1 ? 's' : ''} bloqueada${limits.tareas.locked > 1 ? 's' : ''}.
+                <a href="#" onclick="showPremiumModal(); return false;">Vuelve a Premium</a> para acceder a todas.
+            `;
+        } else {
+            lockedBanner.style.display = 'none';
+        }
+    }
     
-    let filtered = tareas;
+    // Si es free y tiene más del límite, trabajar solo con las primeras
+    const tareasBase = (!limits.premium && tareas.length > limits.tareas.max)
+        ? tareas.slice(0, limits.tareas.max)
+        : tareas;
+
+    let filtered = tareasBase;
     const today = new Date().toISOString().split('T')[0];
     
     if (filter === 'hoy') {
