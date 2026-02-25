@@ -819,9 +819,7 @@
                         <h4>🌎 Internacional</h4>
                         <div class="price">$3 USD<span style="font-size:0.55em;font-weight:400">/mes</span></div>
                         <p class="price-detail">Monthly subscription — cancel any time</p>
-                        <button class="btn-payment" onclick="procesarPago('paypal', 'USD', 3)">
-                            Suscribirse con PayPal
-                        </button>
+                        <div id="paypal-subscribe-button" style="margin-top: 12px;"></div>
                     </div>
                 </div>
                 <p class="premium-guarantee">
@@ -842,6 +840,9 @@
             <button class="btn-cookie-accept" onclick="acceptCookies()">Aceptar</button>
         </div>
     </div>
+
+    <!-- PayPal SDK (suscripciones) -->
+    <script src="https://www.paypal.com/sdk/js?client-id=Ab76zjr_5ed2oQL7SdkeXZPLcy-0D867VvyvbRYhx3cbo7hy2UTz42o8AK0bqEl0LaEfHrIlZQkiBij5&vault=true&intent=subscription"></script>
 
     <!-- Scripts -->
     <script src="js/api.js"></script>

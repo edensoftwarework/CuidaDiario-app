@@ -107,105 +107,70 @@ const Payments = {
     },
 
     /**
-     * Inicializar pago con PayPal
+     * Inicializar botón de suscripción mensual con PayPal
+     * Se renderiza directamente en #paypal-subscribe-button del HTML
+     */
+    initPayPalSubscriptionButton() {
+        if (!window.paypal) return;
+        const container = document.getElementById('paypal-subscribe-button');
+        if (!container) return;
+
+        paypal.Buttons({
+            style: {
+                layout: 'vertical',
+                color: 'blue',
+                shape: 'rect',
+                label: 'subscribe'
+            },
+            createSubscription: (data, actions) => {
+                return actions.subscription.create({
+                    plan_id: 'P-3X388787GJ031361LNGPC3HY' // SANDBOX — reemplazar por plan_id de producción cuando corresponda
+                });
+            },
+            onApprove: async (data) => {
+                if (typeof showToast === 'function') showToast('¡Suscripción activa! Activando Premium...', 'success', 4000);
+
+                // Notificar al backend para activar premium
+                const token = API.getToken();
+                if (token) {
+                    try {
+                        await fetch(`${API.BASE_URL}/api/paypal/activate-subscription`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${token}`
+                            },
+                            body: JSON.stringify({ subscriptionID: data.subscriptionID })
+                        });
+                    } catch (e) {
+                        console.error('Error activando premium:', e);
+                    }
+                }
+
+                this.handleSuccessfulPayment({
+                    method: 'paypal',
+                    transactionId: data.subscriptionID,
+                    amount: 3,
+                    currency: 'USD'
+                });
+            },
+            onError: (err) => {
+                console.error('Error en PayPal:', err);
+                if (typeof showToast === 'function') showToast('Error al procesar el pago con PayPal', 'error');
+                else alert('Error al procesar el pago con PayPal');
+            },
+            onCancel: () => {
+                if (typeof showToast === 'function') showToast('Suscripción cancelada', 'info');
+            }
+        }).render('#paypal-subscribe-button');
+    },
+
+    /**
+     * initPayPal — mantiene compatibilidad con llamadas existentes
      */
     async initPayPal(currency, amount) {
-        try {
-            const token = API.getToken();
-            if (!token) {
-                if (typeof showToast === 'function') showToast('Debes iniciar sesión para suscribirte.', 'error');
-                else alert('Debes iniciar sesión para suscribirte.');
-                return;
-            }
-
-            // Cerrar modal premium si está abierto
-            if (typeof closePremiumModal === 'function') closePremiumModal();
-
-            // Mostrar feedback de carga
-            if (typeof showToast === 'function') showToast('Cargando PayPal...', 'info', 3000);
-
-            // Cargar SDK de PayPal si no está cargado aún
-            if (!window.paypal) {
-                await this.loadPayPalSDK(currency);
-            }
-
-            // Eliminar modal anterior si existe
-            const existingModal = document.getElementById('paypal-modal');
-            if (existingModal) existingModal.remove();
-
-            // Crear modal con contenedor para el botón PayPal
-            const modal = document.createElement('div');
-            modal.id = 'paypal-modal';
-            modal.className = 'modal active';
-            modal.innerHTML = `
-                <div class="modal-content" style="max-width: 450px; padding: 30px; text-align: center;">
-                    <h3 style="margin-bottom: 10px;">💳 Pago con PayPal</h3>
-                    <p style="color: #666; margin-bottom: 5px;">Plan Premium — CuidaDiario</p>
-                    <p style="font-size: 1.3rem; font-weight: 700; margin-bottom: 20px;">$${amount} ${currency}/mes</p>
-                    <div id="paypal-button-container" style="min-height: 45px;"></div>
-                    <button onclick="document.getElementById('paypal-modal').remove()" style="margin-top: 20px; background: none; border: none; color: #999; cursor: pointer; font-size: 0.9rem; text-decoration: underline;">Cancelar</button>
-                </div>
-            `;
-            document.body.appendChild(modal);
-
-            // Renderizar botones de PayPal
-            paypal.Buttons({
-                style: {
-                    layout: 'vertical',
-                    color: 'blue',
-                    shape: 'rect',
-                    label: 'paypal'
-                },
-                // createOrder llama al backend para crear la orden de forma segura
-                createOrder: async () => {
-                    const response = await fetch(`${API.BASE_URL}/api/paypal/create-order`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${token}`
-                        },
-                        body: JSON.stringify({ amount: String(amount), currency })
-                    });
-                    const data = await response.json();
-                    if (!response.ok) throw new Error(data.error || 'Error al crear orden PayPal');
-                    return data.orderID;
-                },
-                // onApprove llama al backend para capturar el pago y activar premium
-                onApprove: async (data) => {
-                    if (typeof showToast === 'function') showToast('Procesando pago...', 'info', 3000);
-                    const response = await fetch(`${API.BASE_URL}/api/paypal/capture-order/${data.orderID}`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${token}`
-                        }
-                    });
-                    const result = await response.json();
-                    if (!response.ok) throw new Error(result.error || 'Error al capturar pago PayPal');
-
-                    document.getElementById('paypal-modal')?.remove();
-                    this.handleSuccessfulPayment({
-                        method: 'paypal',
-                        transactionId: data.orderID,
-                        amount: amount,
-                        currency: currency
-                    });
-                },
-                onError: (err) => {
-                    console.error('Error en PayPal:', err);
-                    if (typeof showToast === 'function') showToast('Error al procesar el pago con PayPal', 'error');
-                    else alert('Error al procesar el pago con PayPal');
-                },
-                onCancel: () => {
-                    if (typeof showToast === 'function') showToast('Pago cancelado', 'info');
-                }
-            }).render('#paypal-button-container');
-
-        } catch (error) {
-            console.error('Error en PayPal:', error);
-            if (typeof showToast === 'function') showToast('Error al cargar PayPal. Por favor, intenta nuevamente.', 'error');
-            else alert('Error al procesar el pago. Por favor, intenta nuevamente.');
-        }
+        // El botón ya está renderizado en #paypal-subscribe-button directamente en el HTML
+        // Esta función ya no es necesaria con el flujo de suscripción
     },
 
     /**
@@ -268,8 +233,8 @@ const Payments = {
      * @param {Object} paymentData - Datos del pago
      */
     handleSuccessfulPayment(paymentData) {
-        // Guardar estado premium
-        Storage.setPremium(paymentData);
+        // Actualizar estado premium en el objeto de usuario (específico por cuenta)
+        Storage.setPremiumStatus(true);
 
         // Cerrar modal de premium
         closePremiumModal();
@@ -279,9 +244,6 @@ const Payments = {
 
         // Mostrar mensaje de éxito
         this.showSuccessMessage(paymentData);
-
-        // Enviar confirmación al backend (en producción)
-        // this.sendPaymentConfirmation(paymentData);
     },
 
     /**
@@ -427,11 +389,15 @@ const Payments = {
     }
 };
 
-// Verificar pagos al cargar la página
+// Verificar pagos al cargar la página e inicializar botón PayPal
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => Payments.checkPaymentFromURL());
+    document.addEventListener('DOMContentLoaded', () => {
+        Payments.checkPaymentFromURL();
+        Payments.initPayPalSubscriptionButton();
+    });
 } else {
     Payments.checkPaymentFromURL();
+    Payments.initPayPalSubscriptionButton();
 }
 
 // Exponer función global para usar desde HTML

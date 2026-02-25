@@ -351,10 +351,22 @@ const Storage = {
 
     // ========== PREMIUM ==========
     getPremiumStatus() {
-        return this.get(this.KEYS.PREMIUM_STATUS) || false;
+        // Siempre leer desde el usuario autenticado (dato del backend, específico por cuenta)
+        const user = API.getUser();
+        if (user && typeof user.premium !== 'undefined') {
+            return user.premium === true;
+        }
+        // Fallback: localStorage solo si no hay usuario cargado (no debería ocurrir)
+        return false;
     },
 
     setPremiumStatus(status) {
+        // Actualizar también el objeto de usuario en localStorage para coherencia
+        const user = API.getUser();
+        if (user) {
+            user.premium = status;
+            API.setUser(user);
+        }
         return this.set(this.KEYS.PREMIUM_STATUS, status);
     },
 
