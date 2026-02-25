@@ -34,7 +34,7 @@
         <div class="container header-content">
             <div class="logo">
                 <h1>CuidaDiario</h1>
-                <span class="logo-subtitle">by EDEN SoftWork</span>
+                <span class="logo-subtitle" id="userGreeting" title="Ver mi perfil">by EDEN SoftWork</span>
             </div>
             <nav class="main-nav">
                 <button class="nav-toggle" id="navToggle" aria-label="Abrir menú">☰</button>
@@ -411,7 +411,7 @@
                         <li><a href="pages/about.html">Sobre Nosotros</a></li>
                         <li><a href="pages/privacy.html">Política de Privacidad</a></li>
                         <li><a href="pages/terms.html">Términos de Uso</a></li>
-                        <li><a href="mailto:contacto@edensoftwork.com">Contacto</a></li>
+                        <li><a href="mailto:edensoftwarework@gmail.com">Contacto</a></li>
                     </ul>
                 </div>
                 <div class="footer-info">
@@ -841,6 +841,44 @@
         </div>
     </div>
 
+    <!-- Modal: Perfil de Usuario -->
+    <div class="modal" id="profileModal">
+        <div class="modal-content" style="max-width:480px;">
+            <div class="modal-header">
+                <h3>👤 Mi Perfil</h3>
+                <button class="modal-close" onclick="closeProfileModal()">&times;</button>
+            </div>
+            <div style="padding:24px;">
+                <form id="profileForm" onsubmit="saveProfile(event)">
+                    <div class="form-group">
+                        <label for="profileNombre">Nombre</label>
+                        <input type="text" id="profileNombre" required placeholder="Tu nombre">
+                    </div>
+                    <div class="form-group">
+                        <label for="profileEmail">Email</label>
+                        <input type="email" id="profileEmail" required placeholder="Tu email">
+                    </div>
+                    <hr style="border:none;border-top:1px solid var(--border-color);margin:20px 0 12px;">
+                    <p style="font-size:0.85em;color:var(--text-secondary);margin-bottom:14px;">🔒 Cambiar contraseña (dejá en blanco si no querés cambiarla)</p>
+                    <div class="form-group">
+                        <label for="profilePassword">Nueva contraseña</label>
+                        <input type="password" id="profilePassword" minlength="6" placeholder="Mínimo 6 caracteres">
+                    </div>
+                    <div class="form-group">
+                        <label for="profilePasswordConfirm">Confirmar nueva contraseña</label>
+                        <input type="password" id="profilePasswordConfirm" placeholder="Repetí la nueva contraseña">
+                    </div>
+                    <button type="submit" class="btn-primary" style="width:100%;margin-top:8px;" id="profileSaveBtn">Guardar cambios</button>
+                </form>
+                <div id="profilePremiumInfo" style="display:none;margin-top:20px;padding:14px 16px;background:rgba(76,175,80,0.1);border:1px solid rgba(76,175,80,0.3);border-radius:10px;">
+                    <p style="font-size:0.9em;color:#4CAF50;font-weight:600;margin-bottom:6px;">✓ Suscripción Premium activa</p>
+                    <p style="font-size:0.82em;color:var(--text-secondary);line-height:1.5;">Para cancelar tu suscripción, ingresá a <a href="https://www.mercadopago.com.ar/subscriptions" target="_blank" style="color:#f0c040;">MercadoPago → Mis suscripciones</a> y seleccioná <strong>CuidaDiario Premium → Cancelar</strong>.<br>Al cancelar, tu acceso premium se desactivará automáticamente.</p>
+                    <p style="font-size:0.8em;color:var(--text-secondary);margin-top:8px;">¿Dudas? Escribinos a <a href="mailto:edensoftwarework@gmail.com" style="color:#f0c040;">edensoftwarework@gmail.com</a></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast Notifications -->
     <div id="toastContainer" class="toast-container"></div>
 
@@ -870,10 +908,14 @@
             window.location.href = 'login.html';
         }
         
-        // Mostrar nombre de usuario
+        // Mostrar nombre de usuario y habilitar perfil al hacer clic
         const user = API.getUser();
         if (user) {
-            document.querySelector('.logo-subtitle').textContent = `Hola, ${user.nombre}`;
+            const greeting = document.getElementById('userGreeting');
+            greeting.textContent = `Hola, ${user.nombre} ▾`;
+            greeting.style.cursor = 'pointer';
+            greeting.style.textDecoration = 'underline dotted';
+            greeting.onclick = openProfileModal;
         }
     </script>
 </body>

@@ -1518,7 +1518,13 @@ function updatePremiumStatus() {
     
     if (isPremium) {
         premiumStatus.style.display = 'block';
-        premiumText.textContent = '\u2713 Premium';
+        premiumStatus.innerHTML = `
+            <span class="premium-badge">✓ Usuario Premium</span>
+            <span style="font-size:0.82em;margin-left:12px;color:rgba(255,255,255,0.7);">
+                Para cancelar: <a href="https://www.mercadopago.com.ar/subscriptions" target="_blank" style="color:#f0c040;text-decoration:underline;">MercadoPago → Mis suscripciones</a>
+            </span>
+        `;
+        premiumText.textContent = '✓ Premium';
         btnPremium.style.background = 'linear-gradient(135deg, #4CAF50, #2E7D32)';
         btnPremium.style.color = 'white';
         btnPremium.title = 'Ya eres usuario Premium';
@@ -1917,6 +1923,70 @@ window.closePacienteForm = closePacienteForm;
 window.savePaciente = savePaciente;
 window.editPaciente = editPaciente;
 window.deletePaciente = deletePaciente;
+
+// ========== PERFIL DE USUARIO ==========
+
+function openProfileModal() {
+    const user = API.getUser();
+    if (!user) return;
+    document.getElementById('profileNombre').value = user.nombre || '';
+    document.getElementById('profileEmail').value = user.email || '';
+    document.getElementById('profilePassword').value = '';
+    document.getElementById('profilePasswordConfirm').value = '';
+    // Mostrar info premium si aplica
+    const premiumInfo = document.getElementById('profilePremiumInfo');
+    if (premiumInfo) premiumInfo.style.display = Storage.getPremiumStatus() ? 'block' : 'none';
+    document.getElementById('profileModal').classList.add('active');
+}
+
+function closeProfileModal() {
+    document.getElementById('profileModal').classList.remove('active');
+}
+
+async function saveProfile(e) {
+    e.preventDefault();
+    const nombre = document.getElementById('profileNombre').value.trim();
+    const email = document.getElementById('profileEmail').value.trim();
+    const password = document.getElementById('profilePassword').value;
+    const passwordConfirm = document.getElementById('profilePasswordConfirm').value;
+
+    if (password && password !== passwordConfirm) {
+        showToast('Las contraseñas no coinciden', 'error');
+        return;
+    }
+    if (password && password.length < 6) {
+        showToast('La contraseña debe tener al menos 6 caracteres', 'error');
+        return;
+    }
+
+    const btn = document.getElementById('profileSaveBtn');
+    btn.disabled = true;
+    btn.textContent = 'Guardando...';
+
+    try {
+        const payload = { nombre, email };
+        if (password) payload.password = password;
+        const data = await API.updateProfile(payload);
+        // Actualizar localStorage con nuevos datos
+        const updated = data.usuario || { nombre, email, premium: Storage.getPremiumStatus() };
+        API.setUser({ ...API.getUser(), ...updated });
+        // Actualizar saludo en el header
+        const greeting = document.getElementById('userGreeting');
+        if (greeting) greeting.textContent = `Hola, ${updated.nombre} ▾`;
+        showToast('✅ Perfil actualizado correctamente', 'success');
+        closeProfileModal();
+    } catch (err) {
+        showToast(err.message || 'Error al actualizar el perfil', 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Guardar cambios';
+    }
+}
+
+window.openProfileModal = openProfileModal;
+window.closeProfileModal = closeProfileModal;
+window.saveProfile = saveProfile;
+
 
 
 

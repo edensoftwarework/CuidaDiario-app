@@ -419,6 +419,17 @@ const API = {
             headers: this.getHeaders()
         });
         return this.handleResponse(response);
+    },
+
+    // ==================== PERFIL ====================
+
+    async updateProfile(data) {
+        const response = await fetch(`${this.BASE_URL}/api/profile`, {
+            method: 'PUT',
+            headers: this.getHeaders(),
+            body: JSON.stringify(data)
+        });
+        return this.handleResponse(response);
     }
 };
 
