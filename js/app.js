@@ -131,13 +131,14 @@ async function updateDashboardStats() {
     
     document.getElementById('dashMedCount').textContent = stats.medicamentos;
     
-    // Citas próximas (esta semana)
+    // Citas próximas (esta semana) — comparar strings para evitar desfase UTC
     const citas = await Storage.getCitas();
+    const weekFromNow = new Date(_now);
+    weekFromNow.setDate(weekFromNow.getDate() + 7);
+    const weekFromNowStr = `${weekFromNow.getFullYear()}-${String(weekFromNow.getMonth()+1).padStart(2,'0')}-${String(weekFromNow.getDate()).padStart(2,'0')}`;
     const citasProximas = citas.filter(c => {
-        const citaDate = new Date(c.fecha);
-        const weekFromNow = new Date();
-        weekFromNow.setDate(weekFromNow.getDate() + 7);
-        return citaDate >= new Date() && citaDate <= weekFromNow;
+        const citaDateStr = (c.fecha || '').substring(0, 10);
+        return citaDateStr >= today && citaDateStr <= weekFromNowStr;
     });
     document.getElementById('dashCitasCount').textContent = citasProximas.length;
     
@@ -323,7 +324,7 @@ async function loadMedicamentos() {
                     <p class="item-subtitle">${med.dosis}</p>
                 </div>
                 <div class="item-actions">
-                    <button class="btn-icon" onclick="registrarTomaMedicamento('${med.id}')" title="Registrar toma">✓</button>
+                    <button class="btn-icon btn-registrar-toma" onclick="registrarTomaMedicamento('${med.id}')" title="Registrar toma">✓ Toma</button>
                     <button class="btn-icon" onclick="editMedicamento('${med.id}')" title="Editar">✏️</button>
                     <button class="btn-icon" onclick="deleteMedicamento('${med.id}')" title="Eliminar">🗑️</button>
                 </div>
@@ -380,6 +381,7 @@ async function loadHistorialMedicamentos() {
                 ${h.notas ? `<br><small>${h.notas}</small>` : ''}
             </div>
             <div class="historial-fecha">${formatDate(h.fecha)}</div>
+            <button class="btn-icon btn-historial-delete" onclick="deleteHistorialEntry(${h.id})" title="Eliminar registro">🗑️</button>
         </div>
     `).join('');
 
@@ -489,6 +491,9 @@ async function registrarTomaMedicamento(id) {
     const medicamento = medicamentos.find(m => String(m.id) === String(id));
     if (!medicamento) return;
     
+    // Confirmar antes de registrar
+    if (!confirm(`✅ ¿Registrar toma de "${medicamento.nombre}"?\n${medicamento.dosis}`)) return;
+    
     await Storage.addHistorialMedicamento({
         medicamentoId: id,
         medicamentoNombre: medicamento.nombre,
@@ -496,10 +501,20 @@ async function registrarTomaMedicamento(id) {
         notas: ''
     });
     
-    // Mostrar confirmación
-    alert(`✓ Registrado: ${medicamento.nombre} - ${medicamento.dosis}`);
+    showToast(`✓ Toma registrada: ${medicamento.nombre} — ${medicamento.dosis}`, 'success');
     await loadMedicamentos();
     await loadDashboard();
+}
+
+async function deleteHistorialEntry(id) {
+    if (!confirm('¿Eliminar este registro del historial?')) return;
+    try {
+        await Storage.deleteHistorialMedicamento(id);
+        showToast('Registro eliminado', 'success');
+        await loadHistorialMedicamentos();
+    } catch (err) {
+        showToast('No se pudo eliminar el registro', 'error');
+    }
 }
 
 // Event listener para cambio de frecuencia
@@ -1582,7 +1597,9 @@ window.acceptCookies = acceptCookies;
 // ========== UTILIDADES ==========
 function formatDate(dateStr) {
     if (!dateStr) return '';
-    const date = new Date(dateStr);
+    // Parsear como fecha local (no UTC) para evitar desfase de zona horaria
+    const [year, month, day] = String(dateStr).substring(0, 10).split('-').map(Number);
+    const date = new Date(year, month - 1, day);
     return date.toLocaleDateString('es', { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
@@ -1632,11 +1649,90 @@ function closeWelcomeBanner() {
     Storage.set(Storage.KEYS.WELCOME_SHOWN, true);
 }
 
+// ========== MODALES DE DASHBOARD ==========
+async function openDashboardModal(type) {
+    const modal = document.getElementById('dashboardDetailModal');
+    const title = document.getElementById('dashDetailTitle');
+    const body = document.getElementById('dashDetailBody');
+
+    const icons = { medicamentos: '💊', citas: '📅', tareas: '✓', registros: '📝' };
+    const names = { medicamentos: 'Medicamentos activos', citas: 'Citas esta semana', tareas: 'Tareas pendientes hoy', registros: 'Registros este mes' };
+    title.textContent = `${icons[type] || ''} ${names[type] || type}`;
+    body.innerHTML = '<p style="color:var(--text-secondary);">Cargando...</p>';
+    modal.classList.add('active');
+
+    try {
+        const _now = new Date();
+        const today = `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}-${String(_now.getDate()).padStart(2,'0')}`;
+        const thisMonth = today.substring(0, 7);
+
+        if (type === 'medicamentos') {
+            const meds = await Storage.getMedicamentos();
+            if (!meds.length) { body.innerHTML = '<p class="empty-state">Sin medicamentos registrados</p>'; return; }
+            body.innerHTML = meds.map(m => `
+                <div style="padding:10px 0;border-bottom:1px solid var(--border-color);">
+                    <strong>💊 ${m.nombre}</strong> — <span style="color:var(--text-secondary);">${m.dosis}</span>
+                    <br><small style="color:var(--text-secondary);">${formatFrecuenciaMed(m)}</small>
+                </div>`).join('');
+
+        } else if (type === 'citas') {
+            const citas = await Storage.getCitas();
+            const weekLater = new Date(_now); weekLater.setDate(weekLater.getDate() + 7);
+            const weekLaterStr = `${weekLater.getFullYear()}-${String(weekLater.getMonth()+1).padStart(2,'0')}-${String(weekLater.getDate()).padStart(2,'0')}`;
+            const proximas = citas.filter(c => {
+                const d = (c.fecha || '').substring(0, 10);
+                return d >= today && d <= weekLaterStr;
+            });
+            if (!proximas.length) { body.innerHTML = '<p class="empty-state">Sin citas esta semana</p>'; return; }
+            body.innerHTML = proximas.map(c => `
+                <div style="padding:10px 0;border-bottom:1px solid var(--border-color);">
+                    <strong>📅 ${c.titulo || c.medico || 'Cita'}</strong>
+                    <br><small style="color:var(--text-secondary);">${formatDate(c.fecha)}${c.hora ? ' a las ' + c.hora : ''}${c.lugar ? ' — ' + c.lugar : ''}</small>
+                </div>`).join('');
+
+        } else if (type === 'tareas') {
+            const tareas = await Storage.getTareas();
+            const pendientes = tareas.filter(t => !t.completada && (t.fecha || '').substring(0, 10) === today);
+            if (!pendientes.length) { body.innerHTML = '<p class="empty-state">Sin tareas pendientes hoy 🎉</p>'; return; }
+            body.innerHTML = pendientes.map(t => `
+                <div style="padding:10px 0;border-bottom:1px solid var(--border-color);">
+                    <strong>✓ ${t.titulo || t.nombre}</strong>
+                    ${t.descripcion ? `<br><small style="color:var(--text-secondary);">${t.descripcion}</small>` : ''}
+                </div>`).join('');
+
+        } else if (type === 'registros') {
+            const historial = await Storage.getHistorialMedicamentos();
+            const sintomas = await Storage.getSintomas();
+            const regMes = [
+                ...historial.filter(h => (h.fecha || '').startsWith(thisMonth)).map(h => ({ tipo: '💊', texto: `${h.medicamento_nombre || h.medicamentoNombre} — ${h.dosis}`, fecha: h.fecha })),
+                ...sintomas.filter(s => (s.fecha || '').startsWith(thisMonth)).map(s => ({ tipo: '🩺', texto: s.descripcion || s.tipo, fecha: s.fecha }))
+            ].sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+            if (!regMes.length) { body.innerHTML = '<p class="empty-state">Sin registros este mes</p>'; return; }
+            body.innerHTML = regMes.map(r => `
+                <div style="padding:10px 0;border-bottom:1px solid var(--border-color);">
+                    <strong>${r.tipo} ${r.texto}</strong>
+                    <br><small style="color:var(--text-secondary);">${formatDate(r.fecha)}</small>
+                </div>`).join('');
+        }
+    } catch (err) {
+        body.innerHTML = '<p class="empty-state">Error al cargar los datos</p>';
+    }
+}
+
 function setupEventListeners() {
     // Event listener para botón premium en header
     const btnPremium = document.getElementById('btnPremium');
     if (btnPremium) {
         btnPremium.addEventListener('click', showPremiumModal);
+    }
+
+    // Interceptar botón Atrás en móvil para mostrar confirmación
+    if (/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
+        history.pushState(null, '', location.href);
+        window.addEventListener('popstate', () => {
+            history.pushState(null, '', location.href);
+            document.getElementById('exitConfirmModal').classList.add('active');
+        });
     }
     
     // Cerrar modales al hacer clic fuera
@@ -1986,6 +2082,8 @@ async function saveProfile(e) {
 window.openProfileModal = openProfileModal;
 window.closeProfileModal = closeProfileModal;
 window.saveProfile = saveProfile;
+window.openDashboardModal = openDashboardModal;
+window.deleteHistorialEntry = deleteHistorialEntry;
 
 
 

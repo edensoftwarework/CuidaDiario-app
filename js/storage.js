@@ -278,6 +278,15 @@ const Storage = {
         }
     },
 
+    async deleteHistorialMedicamento(id) {
+        try {
+            return await API.deleteHistorialMedicamento(id);
+        } catch (error) {
+            console.error('Error al eliminar registro:', error);
+            throw error;
+        }
+    },
+
     // ========== SIGNOS VITALES (API) ==========
     async getSignosVitales() {
         try {

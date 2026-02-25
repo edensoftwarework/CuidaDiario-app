@@ -324,11 +324,14 @@ body {
     align-items: center;
     gap: 20px;
     transition: var(--transition);
+    cursor: pointer;
+    user-select: none;
 }
 
 .dashboard-card:hover {
     transform: translateY(-5px);
     box-shadow: var(--shadow-md);
+    border: 1px solid var(--primary-light);
 }
 
 .card-icon {
@@ -476,6 +479,34 @@ body {
 .btn-icon:hover {
     opacity: 1;
     transform: scale(1.1);
+}
+
+/* Botón Registrar Toma — más visible y descriptivo */
+.btn-registrar-toma {
+    background: var(--primary-color);
+    color: #fff;
+    font-size: 0.78rem;
+    font-weight: 700;
+    padding: 5px 10px;
+    border-radius: 20px;
+    opacity: 1;
+    white-space: nowrap;
+    letter-spacing: 0.3px;
+}
+.btn-registrar-toma:hover {
+    background: var(--primary-dark);
+    transform: scale(1.05);
+}
+
+/* Botón eliminar en historial — sólo visible en hover para no saturar */
+.btn-historial-delete {
+    opacity: 0.35;
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+.btn-historial-delete:hover {
+    opacity: 1;
+    transform: scale(1.15);
 }
 
 .item-details {
@@ -975,6 +1006,7 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 8px;
 }
 
 .historial-info {
@@ -984,6 +1016,16 @@ body {
 .historial-fecha {
     font-size: 0.85rem;
     color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+/* Texto de ayuda bajo inputs (ej: selector de fecha en móvil) */
+.input-hint {
+    display: block;
+    margin-top: 4px;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
 }
 
 /* ===========================================
@@ -1617,6 +1659,19 @@ body {
 .paciente-item:hover {
     border-color: var(--primary-light);
     background: #f1f8e9;
+}
+
+/* Mejor visibilidad para botones de acción en la tarjeta paciente */
+.paciente-item .btn-icon {
+    opacity: 1;
+    background: rgba(0,0,0,0.05);
+    border-radius: 8px;
+    padding: 6px 8px;
+    font-size: 1.1rem;
+}
+.paciente-item .btn-icon:hover {
+    background: rgba(0,0,0,0.12);
+    transform: scale(1.1);
 }
 
 .paciente-info {

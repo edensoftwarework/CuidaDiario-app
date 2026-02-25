@@ -386,6 +386,14 @@ const API = {
         return this.handleResponse(response);
     },
 
+    async deleteHistorialMedicamento(id) {
+        const response = await fetch(`${this.BASE_URL}/api/historial-medicamentos/${id}`, {
+            method: 'DELETE',
+            headers: this.getHeaders()
+        });
+        return this.handleResponse(response);
+    },
+
     // ==================== PACIENTES ====================
 
     async getPacientes() {
