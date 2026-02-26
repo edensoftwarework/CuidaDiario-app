@@ -888,8 +888,14 @@
                 <!-- Sección de notificaciones push -->
                 <div id="pushNotifSection" style="margin-top:16px;padding:14px 16px;background:rgba(33,150,243,0.07);border:1px solid rgba(33,150,243,0.2);border-radius:10px;">
                     <p style="font-size:0.9em;font-weight:600;margin-bottom:4px;">🔔 Notificaciones push</p>
-                    <p style="font-size:0.8em;color:var(--text-secondary);margin-bottom:12px;line-height:1.5;">Recibí recordatorios de medicamentos y citas aunque la app esté cerrada.</p>
+                    <p style="font-size:0.8em;color:var(--text-secondary);margin-bottom:12px;line-height:1.5;">Recordatorios automáticos aunque la app esté cerrada. Se activan solos al iniciar sesión.</p>
                     <button id="pushToggleBtn" onclick="togglePushNotifications()" class="btn-secondary" style="width:100%;font-size:0.85rem;">🔔 Activar notificaciones push</button>
+                </div>
+                <!-- Sección: instalar app (Add to Home Screen) -->
+                <div style="margin-top:12px;padding:14px 16px;background:rgba(102,126,234,0.07);border:1px solid rgba(102,126,234,0.2);border-radius:10px;">
+                    <p style="font-size:0.9em;font-weight:600;margin-bottom:4px;">📲 Instalar app en tu celular</p>
+                    <p style="font-size:0.8em;color:var(--text-secondary);margin-bottom:12px;line-height:1.5;">Instalá CuidaDiario como app para acceso rápido y notificaciones más confiables, incluso con el navegador cerrado.</p>
+                    <button id="a2hsBtn" onclick="triggerA2HS()" class="btn-secondary" style="width:100%;font-size:0.85rem;">📲 Agregar a pantalla de inicio</button>
                 </div>            </div>
         </div>
     </div>

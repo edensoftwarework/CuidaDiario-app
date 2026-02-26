@@ -17,10 +17,10 @@
  * 9. startPushReminders() — chequea cada hora y envía recordatorios de
  *      medicamentos (±35 min), citas del día siguiente, tareas del día (8 AM)
  *
- * RECUPERACIÓN DE CONTRASEÑA (nodemailer):
+ * RECUPERACIÓN DE CONTRASEÑA (Resend HTTP API — sin SMTP, funciona en Railway):
  * 10. POST /api/forgot-password  — genera token, guarda en DB, envía email
  * 11. POST /api/reset-password   — valida token, actualiza password_hash
- *     → Requiere: SMTP_USER, SMTP_PASS, FRONTEND_URL en Railway env vars
+ *     → Requiere: RESEND_API_KEY, FRONTEND_URL en Railway env vars
  *
  * SEGURIDAD paciente_id:
  * 12. validatePaciente()   — verifica que el paciente pertenece al usuario
@@ -30,19 +30,21 @@
  * ANTES DE HACER DEPLOY EN RAILWAY:
  *   package.json dependencies:
  *     "web-push": "^3.6.7"
- *     "nodemailer": "^6.9.0"
+ *     (nodemailer ya NO es necesario — se usa Resend via HTTPS nativo)
  *
  *   Variables de entorno:
  *     VAPID_PUBLIC_KEY   = <tu clave pública VAPID>
  *     VAPID_PRIVATE_KEY  = <tu clave privada VAPID>
  *     VAPID_EMAIL        = mailto:edensoftwarework@gmail.com
- *     SMTP_USER          = tu-gmail@gmail.com
- *     SMTP_PASS          = tu-app-password-de-gmail   (no la contraseña normal)
- *     SMTP_FROM          = "CuidaDiario <tu-gmail@gmail.com>"  (opcional)
+ *     RESEND_API_KEY     = re_xxxxxxxxxx  (de https://resend.com/api-keys)
+ *     EMAIL_FROM         = "CuidaDiario <onboarding@resend.dev>"   ← sin dominio propio
+ *                        o "CuidaDiario <noreply@tudominio.com>"   ← con dominio verificado
  *     FRONTEND_URL       = https://tu-frontend.com  (sin barra final)
  *
- *   Crear App Password de Gmail:
- *     myaccount.google.com → Seguridad → Contraseñas de aplicaciones
+ *   Crear API Key de Resend (gratis, 3000 emails/mes):
+ *     1. Registrate en https://resend.com
+ *     2. Generá una API Key en https://resend.com/api-keys
+ *     3. Agregá RESEND_API_KEY en las variables de entorno de Railway
  * ============================================================
  */
 
@@ -57,24 +59,66 @@ const cors = require('cors');
 const https = require('https');
 const crypto = require('crypto');          // ← nativo Node.js, sin instalar nada
 const webPush = require('web-push');       // ← push notifications
-const nodemailer = require('nodemailer'); // ← emails de recuperación (npm install nodemailer)
 
-// ========== NODEMAILER (emails) ==========
-// Configurar en Railway: SMTP_USER, SMTP_PASS, SMTP_FROM (opcional), FRONTEND_URL
-const SMTP_USER     = process.env.SMTP_USER  || '';
-const SMTP_PASS     = process.env.SMTP_PASS  || '';
-const SMTP_FROM     = process.env.SMTP_FROM  || SMTP_USER;
-const FRONTEND_URL  = (process.env.FRONTEND_URL || '').replace(/\/$/, ''); // sin barra final
+// ========== EMAIL VIA RESEND API (HTTP puro — Railway no bloquea puerto 443) ==========
+// Railway bloquea puertos SMTP (587/465). Resend usa HTTPS (443) → siempre funciona.
+// Plan gratuito: 3000 emails/mes — https://resend.com/
+//
+// Variables requeridas en Railway:
+//   RESEND_API_KEY  = re_xxxxxxxxxx   (de https://resend.com/api-keys)
+//   EMAIL_FROM      = "CuidaDiario <onboarding@resend.dev>"   ← sin dominio propio
+//                   o "CuidaDiario <noreply@tudominio.com>"   ← con dominio verificado en Resend
+//   FRONTEND_URL    = https://tu-frontend.com  (sin barra final)
 
-let emailTransporter = null;
-if (SMTP_USER && SMTP_PASS) {
-    emailTransporter = nodemailer.createTransport({
-        service: 'gmail',   // Cambiá a 'outlook', 'yahoo', etc. si usás otro proveedor
-        auth: { user: SMTP_USER, pass: SMTP_PASS }
+const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
+const EMAIL_FROM     = process.env.EMAIL_FROM || process.env.SMTP_FROM || 'CuidaDiario <onboarding@resend.dev>';
+const FRONTEND_URL   = (process.env.FRONTEND_URL || '').replace(/\/$/, '');
+
+// Enviar email via Resend HTTP API (sin nodemailer, sin SMTP)
+async function sendEmail({ to, subject, html }) {
+    if (!RESEND_API_KEY) {
+        console.warn('⚠️  RESEND_API_KEY no configurada — email no enviado');
+        return false;
+    }
+    const from = EMAIL_FROM.includes('<') ? EMAIL_FROM : `CuidaDiario <${EMAIL_FROM}>`;
+    const payload = JSON.stringify({ from, to: [to], subject, html });
+    return new Promise((resolve, reject) => {
+        const options = {
+            hostname: 'api.resend.com',
+            path: '/emails',
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${RESEND_API_KEY}`,
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(payload)
+            }
+        };
+        const req = https.request(options, (res) => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => {
+                if (res.statusCode === 200 || res.statusCode === 201) {
+                    resolve(true);
+                } else {
+                    try {
+                        const parsed = JSON.parse(data);
+                        reject(new Error(parsed.message || `Resend error ${res.statusCode}`));
+                    } catch {
+                        reject(new Error(`Resend HTTP ${res.statusCode}: ${data}`));
+                    }
+                }
+            });
+        });
+        req.on('error', reject);
+        req.write(payload);
+        req.end();
     });
-    console.log('✅ Nodemailer (SMTP Gmail) configurado');
+}
+
+if (RESEND_API_KEY) {
+    console.log('✅ Email via Resend API configurado');
 } else {
-    console.warn('⚠️  SMTP_USER / SMTP_PASS no configuradas — envío de emails desactivado');
+    console.warn('⚠️  RESEND_API_KEY no configurada — envío de emails desactivado');
 }
 
 // ========== CONFIGURACIÓN ==========
@@ -252,9 +296,8 @@ app.post('/api/forgot-password', async (req, res) => {
             ? `${FRONTEND_URL}/reset-password.html?token=${token}`
             : `https://cuidadiario.edensoftwork.com/reset-password.html?token=${token}`;
 
-        if (emailTransporter) {
-            await emailTransporter.sendMail({
-                from: `"CuidaDiario" <${SMTP_FROM}>`,
+        try {
+            await sendEmail({
                 to: email,
                 subject: '🔑 Restablecer contraseña — CuidaDiario',
                 html: `
@@ -276,8 +319,9 @@ app.post('/api/forgot-password', async (req, res) => {
                     </div>
                 `
             });
-        } else {
-            console.warn('⚠️  Email no enviado (SMTP no configurado). Token:', token);
+            console.log(`[Email] Instrucciones de recuperación enviadas a ${email}`);
+        } catch (emailErr) {
+            console.warn('⚠️  Email no enviado:', emailErr.message, '— Token debug:', token);
         }
 
         res.json({ message: 'Si ese email está registrado, recibirás un correo con instrucciones.' });
@@ -881,8 +925,8 @@ function startPushReminders() {
                 WHERE m.recordatorio = true
                   AND m.hora_inicio IS NOT NULL
                   AND m.hora_inicio BETWEEN
-                      TO_CHAR(NOW() AT TIME ZONE 'America/Argentina/Buenos_Aires', 'HH24:MI')
-                      AND TO_CHAR((NOW() AT TIME ZONE 'America/Argentina/Buenos_Aires' + INTERVAL '35 minutes'), 'HH24:MI')
+                      (NOW() AT TIME ZONE 'America/Argentina/Buenos_Aires')::TIME
+                      AND ((NOW() AT TIME ZONE 'America/Argentina/Buenos_Aires') + INTERVAL '35 minutes')::TIME
             `);
             for (const med of meds.rows) {
                 await sendPushToUser(med.usuario_id, {
@@ -893,20 +937,29 @@ function startPushReminders() {
                 });
             }
 
-            // ── 2. Citas con recordatorio que son mañana ──
-            const tomorrowStr = new Date(now.getTime() + 86400000).toISOString().split('T')[0];
+            // ── 2. Citas cuyo recordatorio vence en los próximos 20 minutos ──
+            // c.recordatorio = minutos antes de la cita (ej: '30', '60', '1440')
             const citas = await pool.query(`
-                SELECT c.usuario_id, c.titulo, c.fecha, c.hora, c.lugar
+                SELECT c.usuario_id, c.titulo, c.fecha, c.hora, c.recordatorio, c.lugar
                 FROM citas c
                 INNER JOIN push_subscriptions ps ON ps.usuario_id = c.usuario_id
                 WHERE c.recordatorio IS NOT NULL
-                  AND c.fecha = $1
-            `, [tomorrowStr]);
+                  AND c.recordatorio <> '0'
+                  AND c.hora IS NOT NULL
+                  AND (c.fecha || ' ' || c.hora)::timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires'
+                      - (CAST(c.recordatorio AS integer) * INTERVAL '1 minute')
+                      BETWEEN NOW() AND NOW() + INTERVAL '20 minutes'
+            `);
             for (const cita of citas.rows) {
+                const mins = parseInt(cita.recordatorio);
+                const tiempoTexto = mins < 60 ? `en ${mins} min`
+                    : mins === 60 ? 'en 1 hora'
+                    : mins === 1440 ? 'mañana'
+                    : `en ${Math.round(mins / 60)}h`;
                 await sendPushToUser(cita.usuario_id, {
-                    title: '📅 Cita médica mañana',
-                    body: `${cita.titulo}${cita.hora ? ' a las ' + cita.hora : ''}${cita.lugar ? ' en ' + cita.lugar : ''}`,
-                    tag: `cita-${cita.usuario_id}-${tomorrowStr}`,
+                    title: '📅 Recordatorio de cita',
+                    body: `${cita.titulo} — ${tiempoTexto}${cita.lugar ? ' en ' + cita.lugar : ''}`,
+                    tag: `cita-${cita.usuario_id}-${cita.fecha}-${cita.hora}`,
                     url: '/'
                 });
             }
@@ -938,8 +991,8 @@ function startPushReminders() {
     }
 
     checkAndSendReminders(); // correr al arrancar
-    setInterval(checkAndSendReminders, 60 * 60 * 1000); // cada 1 hora
-    console.log('✅ Push reminders iniciados (chequeo cada hora)');
+    setInterval(checkAndSendReminders, 15 * 60 * 1000); // cada 15 minutos
+    console.log('✅ Push reminders iniciados (chequeo cada 15 minutos)');
 }
 
 // ========== MERCADOPAGO ==========

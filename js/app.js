@@ -2080,6 +2080,9 @@ function openProfileModal() {
     const premiumInfo = document.getElementById('profilePremiumInfo');
     if (premiumInfo) premiumInfo.style.display = Storage.getPremiumStatus() ? 'block' : 'none';
     document.getElementById('profileModal').classList.add('active');
+    // Actualizar estado de push notifications y botón A2HS al abrir el modal
+    updatePushToggleUI();
+    updateA2HSButton();
 }
 
 function closeProfileModal() {
@@ -2244,7 +2247,7 @@ async function togglePushNotifications() {
     }
 }
 
-// Inicializar PWA: registrar service worker y sincronizar suscripción existente
+// Inicializar PWA: registrar SW y activar push automáticamente
 async function initPWA() {
     if (!('serviceWorker' in navigator)) return;
 
@@ -2262,19 +2265,33 @@ async function initPWA() {
             }
         });
 
-        // Si ya hay una suscripción activa, sincronizarla con el backend
+        // Si ya hay suscripción activa → sincronizar con el backend y listo
         const existing = await reg.pushManager.getSubscription();
         if (existing && Notification.permission === 'granted') {
             API.savePushSubscription(existing.toJSON()).catch(() => {});
+            await updatePushToggleUI();
+            return;
         }
 
-        // Mostrar banner de notificaciones si aún no se preguntó al usuario
+        // Permiso ya concedido pero sin suscripción → re-suscribir automáticamente
+        if (Notification.permission === 'granted' && !existing) {
+            await _autoSubscribePush(reg);
+            return;
+        }
+
+        // Permiso aún no solicitado → pedirlo automáticamente al usuario
         if (Notification.permission === 'default') {
-            const shown = localStorage.getItem('cuidadiario_push_banner_shown');
-            if (!shown) {
-                // Mostrar banner sutil después de 8 segundos de uso
-                setTimeout(() => showPushBanner(), 8000);
-            }
+            setTimeout(async () => {
+                try {
+                    const permission = await Notification.requestPermission();
+                    if (permission === 'granted') {
+                        const r = await navigator.serviceWorker.ready;
+                        const ok = await _autoSubscribePush(r);
+                        if (ok) showToast('🔔 Notificaciones push activadas', 'success');
+                    }
+                    await updatePushToggleUI();
+                } catch (e) { /* OK si el browser bloquea sin gesto del usuario */ }
+            }, 2000);
         }
 
     } catch (err) {
@@ -2282,7 +2299,85 @@ async function initPWA() {
     }
 }
 
-// Mostrar banner sutil invitando a activar notificaciones
+// Helper: suscribir al push sin interacción del usuario (después de obtener permiso)
+async function _autoSubscribePush(reg) {
+    try {
+        let vapidKey;
+        try {
+            const data = await API.getPushVapidKey();
+            vapidKey = data.publicKey;
+        } catch (e) {
+            vapidKey = window.VAPID_PUBLIC_KEY || null;
+        }
+        if (!vapidKey) return false;
+        const subscription = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(vapidKey)
+        });
+        await API.savePushSubscription(subscription.toJSON());
+        console.log('[Push] Suscripción activada automáticamente');
+        await updatePushToggleUI();
+        return true;
+    } catch (err) {
+        console.warn('[Push] Error al auto-suscribir:', err.message);
+        return false;
+    }
+}
+
+// ===== ADD TO HOME SCREEN (A2HS / PWA install) =====
+let deferredInstallPrompt = null;
+
+window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    updateA2HSButton();
+});
+
+window.addEventListener('appinstalled', () => {
+    deferredInstallPrompt = null;
+    updateA2HSButton();
+    showToast('✅ CuidaDiario instalada en tu pantalla de inicio', 'success');
+});
+
+// Actualizar el botón de instalación según el estado actual de la PWA
+function updateA2HSButton() {
+    const btn = document.getElementById('a2hsBtn');
+    if (!btn) return;
+    if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) {
+        btn.textContent = '✅ App ya instalada';
+        btn.disabled = true;
+        btn.style.opacity = '0.6';
+    } else if (deferredInstallPrompt) {
+        btn.textContent = '📲 Agregar a pantalla de inicio';
+        btn.disabled = false;
+        btn.style.opacity = '';
+    } else {
+        btn.textContent = '📲 Cómo instalar la app';
+        btn.disabled = false;
+        btn.style.opacity = '';
+    }
+}
+
+// Disparar el prompt de instalación o mostrar instrucciones manuales según plataforma
+async function triggerA2HS() {
+    if (deferredInstallPrompt) {
+        deferredInstallPrompt.prompt();
+        const { outcome } = await deferredInstallPrompt.userChoice;
+        if (outcome === 'accepted') deferredInstallPrompt = null;
+        updateA2HSButton();
+    } else {
+        const ua = navigator.userAgent.toLowerCase();
+        if (/iphone|ipad|ipod/.test(ua)) {
+            showToast('En Safari: tocá el ícono compartir ↑ → "Añadir a pantalla de inicio"', 'info');
+        } else if (/android/.test(ua)) {
+            showToast('En Chrome: tocá el menú ⋮ → "Agregar a pantalla de inicio" o "Instalar app"', 'info');
+        } else {
+            showToast('En Chrome/Edge: tocá el ícono ⊕ en la barra de direcciones para instalar', 'info');
+        }
+    }
+}
+
+// Mostrar banner sutil invitando a activar notificaciones (fallback manual)
 function showPushBanner() {
     if (document.getElementById('pushBanner')) return;
     const banner = document.createElement('div');
@@ -2321,6 +2416,8 @@ window.togglePushNotifications = togglePushNotifications;
 window.activarPushDesdeBanner = activarPushDesdeBanner;
 window.cerrarPushBanner = cerrarPushBanner;
 window.updatePushToggleUI = updatePushToggleUI;
+window.triggerA2HS = triggerA2HS;
+window.updateA2HSButton = updateA2HSButton;
 
 
 
