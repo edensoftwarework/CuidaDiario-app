@@ -1,33 +1,48 @@
 /**
- * index.js — Backend CuidaDiario (VERSIÓN COMPLETA CON PUSH NOTIFICATIONS)
+ * index.js — Backend CuidaDiario (VERSIÓN COMPLETA)
  * by EDEN SoftWork
  *
  * ============================================================
- * QUÉ SE INCORPORÓ respecto al index.js anterior:
+ * FUNCIONALIDADES INCLUIDAS:
  *
+ * PUSH NOTIFICATIONS (web-push):
  * 1. require('web-push') — librería para enviar notificaciones push
  * 2. Constantes VAPID — leen las claves de las variables de entorno de Railway
  * 3. webPush.setVapidDetails() — configura la librería al iniciar
- * 4. runMigrations() — ahora también crea la tabla push_subscriptions
- * 5. GET  /api/push/vapid-key  — devuelve la clave pública al frontend
- * 6. POST /api/push/subscribe  — guarda la suscripción push del usuario
- * 7. DELETE /api/push/unsubscribe — elimina la suscripción push del usuario
+ * 4. runMigrations() — crea la tabla push_subscriptions
+ * 5. GET  /api/push/vapid-key      — devuelve la clave pública al frontend
+ * 6. POST /api/push/subscribe      — guarda la suscripción push del usuario
+ * 7. DELETE /api/push/unsubscribe  — elimina la suscripción push del usuario
  * 8. sendPushToUser(userId, payload) — helper interno para enviar push
- * 9. startPushReminders() — chequea cada hora y envía push de:
- *      - Medicamentos con recordatorio activo y hora próxima (±35 min)
- *      - Citas médicas del día siguiente con recordatorio
- *      - Tareas pendientes del día (aviso a las 8 AM)
- * 10. startPushReminders() se llama dentro del app.listen al arrancar
- * ============================================================
+ * 9. startPushReminders() — chequea cada hora y envía recordatorios de
+ *      medicamentos (±35 min), citas del día siguiente, tareas del día (8 AM)
  *
- * ANTES DE HACER DEPLOY:
- *   - Instalar web-push: agregar "web-push": "^3.6.7" en package.json
- *   - En Railway → Variables de entorno, agregar:
- *       VAPID_PUBLIC_KEY=<tu clave pública>
- *       VAPID_PRIVATE_KEY=<tu clave privada>
- *       VAPID_EMAIL=mailto:edensoftwarework@gmail.com
- *   - En el frontend (index.html línea ~960): reemplazar 'TU_VAPID_PUBLIC_KEY_AQUI'
- *     por la misma clave pública que pusiste en VAPID_PUBLIC_KEY
+ * RECUPERACIÓN DE CONTRASEÑA (nodemailer):
+ * 10. POST /api/forgot-password  — genera token, guarda en DB, envía email
+ * 11. POST /api/reset-password   — valida token, actualiza password_hash
+ *     → Requiere: SMTP_USER, SMTP_PASS, FRONTEND_URL en Railway env vars
+ *
+ * SEGURIDAD paciente_id:
+ * 12. validatePaciente()   — verifica que el paciente pertenece al usuario
+ * 13. resolvePatientId()   — auto-asigna paciente a usuarios free si no viene en el body
+ *     Cubre el caso de carrera donde el frontend no setea currentPacienteId a tiempo
+ *
+ * ANTES DE HACER DEPLOY EN RAILWAY:
+ *   package.json dependencies:
+ *     "web-push": "^3.6.7"
+ *     "nodemailer": "^6.9.0"
+ *
+ *   Variables de entorno:
+ *     VAPID_PUBLIC_KEY   = <tu clave pública VAPID>
+ *     VAPID_PRIVATE_KEY  = <tu clave privada VAPID>
+ *     VAPID_EMAIL        = mailto:edensoftwarework@gmail.com
+ *     SMTP_USER          = tu-gmail@gmail.com
+ *     SMTP_PASS          = tu-app-password-de-gmail   (no la contraseña normal)
+ *     SMTP_FROM          = "CuidaDiario <tu-gmail@gmail.com>"  (opcional)
+ *     FRONTEND_URL       = https://tu-frontend.com  (sin barra final)
+ *
+ *   Crear App Password de Gmail:
+ *     myaccount.google.com → Seguridad → Contraseñas de aplicaciones
  * ============================================================
  */
 
@@ -40,7 +55,27 @@ const jwt = require('jsonwebtoken');
 const JWT_SECRET = process.env.JWT_SECRET || 'tu_clave_secreta';
 const cors = require('cors');
 const https = require('https');
-const webPush = require('web-push'); // ← NUEVO: push notifications
+const crypto = require('crypto');          // ← nativo Node.js, sin instalar nada
+const webPush = require('web-push');       // ← push notifications
+const nodemailer = require('nodemailer'); // ← emails de recuperación (npm install nodemailer)
+
+// ========== NODEMAILER (emails) ==========
+// Configurar en Railway: SMTP_USER, SMTP_PASS, SMTP_FROM (opcional), FRONTEND_URL
+const SMTP_USER     = process.env.SMTP_USER  || '';
+const SMTP_PASS     = process.env.SMTP_PASS  || '';
+const SMTP_FROM     = process.env.SMTP_FROM  || SMTP_USER;
+const FRONTEND_URL  = (process.env.FRONTEND_URL || '').replace(/\/$/, ''); // sin barra final
+
+let emailTransporter = null;
+if (SMTP_USER && SMTP_PASS) {
+    emailTransporter = nodemailer.createTransport({
+        service: 'gmail',   // Cambiá a 'outlook', 'yahoo', etc. si usás otro proveedor
+        auth: { user: SMTP_USER, pass: SMTP_PASS }
+    });
+    console.log('✅ Nodemailer (SMTP Gmail) configurado');
+} else {
+    console.warn('⚠️  SMTP_USER / SMTP_PASS no configuradas — envío de emails desactivado');
+}
 
 // ========== CONFIGURACIÓN ==========
 app.use(cors({ origin: '*', credentials: true }));
@@ -50,7 +85,8 @@ app.use(express.json());
 // ========== VAPID — Web Push (NUEVO) ==========
 const VAPID_PUBLIC_KEY  = process.env.VAPID_PUBLIC_KEY;
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
-const VAPID_EMAIL       = process.env.VAPID_EMAIL || 'mailto:edensoftwarework@gmail.com';
+const _vapidEmailRaw    = process.env.VAPID_EMAIL || 'edensoftwarework@gmail.com';
+const VAPID_EMAIL       = _vapidEmailRaw.startsWith('mailto:') ? _vapidEmailRaw : `mailto:${_vapidEmailRaw}`;
 
 if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
     webPush.setVapidDetails(VAPID_EMAIL, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
@@ -81,6 +117,13 @@ async function runMigrations() {
             )
         `);
 
+        // NUEVO: columnas para recuperación de contraseña
+        await pool.query(`
+            ALTER TABLE usuarios
+            ADD COLUMN IF NOT EXISTS reset_token          VARCHAR(128),
+            ADD COLUMN IF NOT EXISTS reset_token_expires  TIMESTAMP
+        `);
+
         console.log('✅ Migraciones completadas');
     } catch (err) {
         console.error('❌ Error en migraciones:', err.message);
@@ -104,6 +147,33 @@ function authMiddleware(req, res, next) {
 function parsePacienteId(req) {
     const v = req.query.paciente_id || req.body?.paciente_id || req.body?.pacienteId;
     return v ? parseInt(v) : null;
+}
+
+// Helper: verifica que el paciente pertenece al usuario autenticado
+async function validatePaciente(pacienteId, usuarioId) {
+    if (!pacienteId) return true;
+    const result = await pool.query(
+        'SELECT id FROM pacientes WHERE id=$1 AND usuario_id=$2 AND activo=true',
+        [pacienteId, usuarioId]
+    );
+    return result.rows.length > 0;
+}
+
+// Helper: si no viene paciente_id en el body, intenta auto-asignarlo para usuarios free
+// Esto cubre el caso en que el frontend no pudo setear currentPacienteId a tiempo.
+async function resolvePatientId(pid, userId) {
+    if (pid) return parseInt(pid);
+    // Solo auto-asignar para usuarios gratuitos (1 solo paciente)
+    const userResult = await pool.query('SELECT premium FROM usuarios WHERE id=$1', [userId]);
+    const isPremium = userResult.rows[0]?.premium || false;
+    if (!isPremium) {
+        const pacResult = await pool.query(
+            'SELECT id FROM pacientes WHERE usuario_id=$1 AND activo=true ORDER BY id ASC LIMIT 1',
+            [userId]
+        );
+        if (pacResult.rows.length > 0) return pacResult.rows[0].id;
+    }
+    return null;
 }
 
 // ========== ENDPOINTS PÚBLICOS ==========
@@ -156,6 +226,89 @@ app.post('/api/login', async (req, res) => {
         res.json({ token, usuario: { id: user.id, nombre: user.nombre, email: user.email, premium: user.premium } });
     } catch (err) {
         res.status(500).json({ error: err.message });
+    }
+});
+
+// ========== RECUPERACIÓN DE CONTRASEÑA ==========
+app.post('/api/forgot-password', async (req, res) => {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email requerido' });
+    try {
+        const result = await pool.query('SELECT id, nombre FROM usuarios WHERE email=$1', [email]);
+        // Responder siempre con éxito para no revelar si el email existe (seguridad)
+        if (result.rows.length === 0)
+            return res.json({ message: 'Si ese email está registrado, recibirás un correo con instrucciones.' });
+
+        const user = result.rows[0];
+        const token = crypto.randomBytes(48).toString('hex'); // 96 chars hex
+        const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+
+        await pool.query(
+            'UPDATE usuarios SET reset_token=$1, reset_token_expires=$2 WHERE id=$3',
+            [token, expires, user.id]
+        );
+
+        const resetLink = FRONTEND_URL
+            ? `${FRONTEND_URL}/reset-password.html?token=${token}`
+            : `https://cuidadiario.edensoftwork.com/reset-password.html?token=${token}`;
+
+        if (emailTransporter) {
+            await emailTransporter.sendMail({
+                from: `"CuidaDiario" <${SMTP_FROM}>`,
+                to: email,
+                subject: '🔑 Restablecer contraseña — CuidaDiario',
+                html: `
+                    <div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;padding:24px;border:1px solid #e0e0e0;border-radius:8px;">
+                        <h2 style="color:#667eea;">CuidaDiario</h2>
+                        <p>Hola <strong>${user.nombre}</strong>,</p>
+                        <p>Recibimos una solicitud para restablecer tu contraseña. Hacé clic en el botón de abajo para crear una nueva:</p>
+                        <div style="text-align:center;margin:28px 0;">
+                            <a href="${resetLink}"
+                               style="background:linear-gradient(135deg,#667eea,#764ba2);color:white;padding:14px 28px;
+                                      border-radius:8px;text-decoration:none;font-weight:600;font-size:1rem;">
+                                Restablecer contraseña
+                            </a>
+                        </div>
+                        <p style="color:#777;font-size:0.85rem;">Este enlace expira en <strong>1 hora</strong>.</p>
+                        <p style="color:#777;font-size:0.85rem;">Si no solicitaste este cambio, podés ignorar este email. Tu contraseña actual no cambiará.</p>
+                        <hr style="border:none;border-top:1px solid #eee;margin:20px 0;">
+                        <p style="color:#aaa;font-size:0.78rem;">CuidaDiario by EDEN SoftWork</p>
+                    </div>
+                `
+            });
+        } else {
+            console.warn('⚠️  Email no enviado (SMTP no configurado). Token:', token);
+        }
+
+        res.json({ message: 'Si ese email está registrado, recibirás un correo con instrucciones.' });
+    } catch (err) {
+        console.error('Error en forgot-password:', err.message);
+        res.status(500).json({ error: 'Error al procesar la solicitud' });
+    }
+});
+
+app.post('/api/reset-password', async (req, res) => {
+    const { token, password } = req.body;
+    if (!token || !password) return res.status(400).json({ error: 'Token y nueva contraseña son requeridos' });
+    if (password.length < 6) return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
+    try {
+        const result = await pool.query(
+            'SELECT id FROM usuarios WHERE reset_token=$1 AND reset_token_expires > NOW()',
+            [token]
+        );
+        if (result.rows.length === 0)
+            return res.status(400).json({ error: 'El enlace es inválido o ya expiró. Solicitá uno nuevo.' });
+
+        const userId = result.rows[0].id;
+        const hash = await bcrypt.hash(password, SALT_ROUNDS);
+        await pool.query(
+            'UPDATE usuarios SET password_hash=$1, reset_token=NULL, reset_token_expires=NULL WHERE id=$2',
+            [hash, userId]
+        );
+        res.json({ message: 'Contraseña actualizada correctamente. Ya podés iniciar sesión.' });
+    } catch (err) {
+        console.error('Error en reset-password:', err.message);
+        res.status(500).json({ error: 'Error al actualizar la contraseña' });
     }
 });
 
@@ -238,9 +391,12 @@ app.delete('/api/pacientes/:id', authMiddleware, async (req, res) => {
 app.post('/api/medicamentos', authMiddleware, async (req, res) => {
     const { nombre, dosis, frecuencia, horaInicio, hora_inicio, recordatorio, notas, horariosCustom, horarios_custom, paciente_id, pacienteId } = req.body;
     try {
+        const pid = await resolvePatientId(paciente_id || pacienteId || null, req.user.id);
+        if (pid && !(await validatePaciente(pid, req.user.id)))
+            return res.status(403).json({ error: 'El paciente no pertenece a este usuario' });
         const result = await pool.query(
             'INSERT INTO medicamentos (usuario_id, paciente_id, nombre, dosis, frecuencia, hora_inicio, recordatorio, notas, horarios_custom) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *',
-            [req.user.id, paciente_id || pacienteId || null, nombre, dosis, frecuencia, horaInicio || hora_inicio || null, recordatorio || false, notas || null, horariosCustom || horarios_custom || null]
+            [req.user.id, pid, nombre, dosis, frecuencia, horaInicio || hora_inicio || null, recordatorio || false, notas || null, horariosCustom || horarios_custom || null]
         );
         res.status(201).json(result.rows[0]);
     } catch (err) {
@@ -298,9 +454,12 @@ app.delete('/api/medicamentos/:id', authMiddleware, async (req, res) => {
 app.post('/api/citas', authMiddleware, async (req, res) => {
     const { tipo, titulo, fecha, hora, lugar, profesional, notas, recordatorio, paciente_id, pacienteId } = req.body;
     try {
+        const pid = await resolvePatientId(paciente_id || pacienteId || null, req.user.id);
+        if (pid && !(await validatePaciente(pid, req.user.id)))
+            return res.status(403).json({ error: 'El paciente no pertenece a este usuario' });
         const result = await pool.query(
             'INSERT INTO citas (usuario_id, paciente_id, tipo, titulo, fecha, hora, lugar, profesional, notas, recordatorio) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *',
-            [req.user.id, paciente_id || pacienteId || null, tipo, titulo, fecha, hora, lugar || null, profesional || null, notas || null, recordatorio || null]
+            [req.user.id, pid, tipo, titulo, fecha, hora, lugar || null, profesional || null, notas || null, recordatorio || null]
         );
         res.status(201).json(result.rows[0]);
     } catch (err) {
@@ -358,9 +517,12 @@ app.delete('/api/citas/:id', authMiddleware, async (req, res) => {
 app.post('/api/tareas', authMiddleware, async (req, res) => {
     const { titulo, categoria, fecha, hora, frecuencia, completada, descripcion, recordatorio, hastaFecha, hasta_fecha, paciente_id, pacienteId } = req.body;
     try {
+        const pid = await resolvePatientId(paciente_id || pacienteId || null, req.user.id);
+        if (pid && !(await validatePaciente(pid, req.user.id)))
+            return res.status(403).json({ error: 'El paciente no pertenece a este usuario' });
         const result = await pool.query(
             'INSERT INTO tareas (usuario_id, paciente_id, titulo, categoria, fecha, hora, frecuencia, completada, descripcion, recordatorio, hasta_fecha) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *',
-            [req.user.id, paciente_id || pacienteId || null, titulo, categoria, fecha, hora || null, frecuencia, completada || false, descripcion || null, recordatorio || false, hastaFecha || hasta_fecha || null]
+            [req.user.id, pid, titulo, categoria, fecha, hora || null, frecuencia, completada || false, descripcion || null, recordatorio || false, hastaFecha || hasta_fecha || null]
         );
         res.status(201).json(result.rows[0]);
     } catch (err) {
@@ -432,9 +594,12 @@ app.delete('/api/tareas/:id', authMiddleware, async (req, res) => {
 app.post('/api/sintomas', authMiddleware, async (req, res) => {
     const { tipo, nombre, intensidad, estadoAnimo, estado_animo, descripcion, fecha, paciente_id, pacienteId } = req.body;
     try {
+        const pid = await resolvePatientId(paciente_id || pacienteId || null, req.user.id);
+        if (pid && !(await validatePaciente(pid, req.user.id)))
+            return res.status(403).json({ error: 'El paciente no pertenece a este usuario' });
         const result = await pool.query(
             'INSERT INTO sintomas (usuario_id, paciente_id, tipo, intensidad, estado_animo, descripcion, fecha) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
-            [req.user.id, paciente_id || pacienteId || null, tipo || nombre, intensidad, estadoAnimo || estado_animo || null, descripcion || null, fecha ? new Date(fecha) : new Date()]
+            [req.user.id, pid, tipo || nombre, intensidad, estadoAnimo || estado_animo || null, descripcion || null, fecha ? new Date(fecha) : new Date()]
         );
         res.status(201).json(result.rows[0]);
     } catch (err) {
@@ -492,9 +657,12 @@ app.delete('/api/sintomas/:id', authMiddleware, async (req, res) => {
 app.post('/api/contactos', authMiddleware, async (req, res) => {
     const { nombre, categoria, especialidad, telefono, email, direccion, notas, paciente_id, pacienteId } = req.body;
     try {
+        const pid = await resolvePatientId(paciente_id || pacienteId || null, req.user.id);
+        if (pid && !(await validatePaciente(pid, req.user.id)))
+            return res.status(403).json({ error: 'El paciente no pertenece a este usuario' });
         const result = await pool.query(
             'INSERT INTO contactos (usuario_id, paciente_id, nombre, categoria, especialidad, telefono, email, direccion, notas) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *',
-            [req.user.id, paciente_id || pacienteId || null, nombre, categoria, especialidad || null, telefono, email || null, direccion || null, notas || null]
+            [req.user.id, pid, nombre, categoria, especialidad || null, telefono, email || null, direccion || null, notas || null]
         );
         res.status(201).json(result.rows[0]);
     } catch (err) {
@@ -552,9 +720,12 @@ app.delete('/api/contactos/:id', authMiddleware, async (req, res) => {
 app.post('/api/signos-vitales', authMiddleware, async (req, res) => {
     const { tipo, valor, sistolica, diastolica, notas, fecha, paciente_id, pacienteId } = req.body;
     try {
+        const pid = await resolvePatientId(paciente_id || pacienteId || null, req.user.id);
+        if (pid && !(await validatePaciente(pid, req.user.id)))
+            return res.status(403).json({ error: 'El paciente no pertenece a este usuario' });
         const result = await pool.query(
             'INSERT INTO signos_vitales (usuario_id, paciente_id, tipo, valor, sistolica, diastolica, notas, fecha) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',
-            [req.user.id, paciente_id || pacienteId || null, tipo, valor || null, sistolica || null, diastolica || null, notas || null, fecha ? new Date(fecha) : new Date()]
+            [req.user.id, pid, tipo, valor || null, sistolica || null, diastolica || null, notas || null, fecha ? new Date(fecha) : new Date()]
         );
         res.status(201).json(result.rows[0]);
     } catch (err) {
@@ -588,9 +759,12 @@ app.delete('/api/signos-vitales/:id', authMiddleware, async (req, res) => {
 app.post('/api/historial-medicamentos', authMiddleware, async (req, res) => {
     const { medicamento_id, medicamentoId, medicamento_nombre, medicamentoNombre, dosis, notas, fecha, paciente_id, pacienteId } = req.body;
     try {
+        const pid = await resolvePatientId(paciente_id || pacienteId || null, req.user.id);
+        if (pid && !(await validatePaciente(pid, req.user.id)))
+            return res.status(403).json({ error: 'El paciente no pertenece a este usuario' });
         const result = await pool.query(
             'INSERT INTO historial_medicamentos (usuario_id, paciente_id, medicamento_id, medicamento_nombre, dosis, notas, fecha) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
-            [req.user.id, paciente_id || pacienteId || null, medicamento_id || medicamentoId || null, medicamento_nombre || medicamentoNombre, dosis || null, notas || null, fecha ? new Date(fecha) : new Date()]
+            [req.user.id, pid, medicamento_id || medicamentoId || null, medicamento_nombre || medicamentoNombre, dosis || null, notas || null, fecha ? new Date(fecha) : new Date()]
         );
         res.status(201).json(result.rows[0]);
     } catch (err) {

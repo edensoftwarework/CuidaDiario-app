@@ -410,6 +410,7 @@ function formatFrecuenciaMed(med) {
 }
 
 async function openMedicamentoModal() {
+    if (!requirePaciente()) return;
     const limits = await Storage.checkLimits();
     if (!limits.premium && limits.medicamentos.exceeded) {
         showPremiumModal();
@@ -723,6 +724,7 @@ function formatTipoCita(tipo) {
 }
 
 function openCitaModal() {
+    if (!requirePaciente()) return;
     editingCitaId = null;
     document.getElementById('citaModalTitle').textContent = 'Agregar Cita';
     document.getElementById('citaForm').reset();
@@ -987,6 +989,7 @@ function renderGraficas() {
 }
 
 function openSintomaModal() {
+    if (!requirePaciente()) return;
     document.getElementById('sintomaForm').reset();
     document.getElementById('sintomaFecha').value = getCurrentDateTime();
     document.getElementById('sintomaModal').classList.add('active');
@@ -1028,6 +1031,7 @@ async function deleteSintoma(id) {
 let currentSignoTipo = null;
 
 function registrarSigno(tipo) {
+    if (!requirePaciente()) return;
     currentSignoTipo = tipo;
     document.getElementById('signoTipo').value = tipo;
     document.getElementById('signoModalTitle').textContent = `Registrar ${formatSignoTipo(tipo)}`;
@@ -1228,6 +1232,7 @@ async function filterTareas(filter) {
 }
 
 async function openTareaModal() {
+    if (!requirePaciente()) return;
     const limits = await Storage.checkLimits();
     if (!limits.premium && limits.tareas.exceeded) {
         showPremiumModal();
@@ -1422,6 +1427,7 @@ async function switchContactoTab(tab) {
 }
 
 async function openContactoModal() {
+    if (!requirePaciente()) return;
     const limits = await Storage.checkLimits();
     if (!limits.premium && limits.contactos.exceeded) {
         showPremiumModal();
@@ -1553,6 +1559,17 @@ function updatePremiumStatus() {
         btnPremium.style.color = '';
         btnPremium.title = 'Obtener Premium';
     }
+}
+
+// ========== GUARDIA DE PACIENTE ==========
+// Bloquea cualquier acción si el usuario no tiene un paciente creado/seleccionado.
+// Retorna true si puede continuar, false si debe crear un paciente primero.
+function requirePaciente() {
+    if (Storage.currentPacienteId) return true;
+    // No hay paciente → mostrar toast y abrir modal de gestión
+    showToast('Primero creá un paciente para poder registrar datos. \u{1F464}', 'warning', 4000);
+    setTimeout(() => openGestionPacientesModal(), 300);
+    return false;
 }
 
 function showPremiumModal() {
@@ -1801,10 +1818,11 @@ async function loadPacienteSelector() {
             // Usuario Free: auto-seleccionar primer paciente para que paciente_id se asigne correctamente
             const paciente = pacientes[0] || null;
             if (paciente) {
-                // IMPORTANTE: setear currentPacienteId para que los nuevos registros se asignen al paciente
-                if (!Storage.currentPacienteId) {
-                    Storage.currentPacienteId = paciente.id;
-                }
+                // Siempre actualizar currentPacienteId con el paciente real del usuario free.
+                // No usar guarda "if (!currentPacienteId)" porque podría quedar con un valor
+                // desactualizado si el paciente fue editado o la sesión se restauró parcialmente.
+                Storage.currentPacienteId = paciente.id;
+                localStorage.setItem('cuidadiario_selected_paciente', String(paciente.id));
                 contentDiv.innerHTML = `
                     <div class="patient-selector-left">
                         <span class="patient-selector-label">&#128100; Paciente:</span>
@@ -1978,7 +1996,14 @@ async function savePaciente(event) {
         if (id) {
             await Storage.updatePaciente(id, data);
         } else {
-            await Storage.addPaciente(data);
+            const newPaciente = await Storage.addPaciente(data);
+            // Asignar currentPacienteId de inmediato para que los registros siguientes
+            // lleven el paciente_id correcto, sin depender de que loadPacienteSelector
+            // lo haga después (evita la condición de carrera).
+            if (newPaciente && newPaciente.id) {
+                Storage.currentPacienteId = newPaciente.id;
+                localStorage.setItem('cuidadiario_selected_paciente', String(newPaciente.id));
+            }
         }
         await loadPacienteSelector();
         await loadPacientesList();
