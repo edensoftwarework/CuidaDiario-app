@@ -37,6 +37,9 @@ async function initApp() {
 
     // Inicializar calendario
     initCalendar();
+
+    // Registrar Service Worker y configurar Push Notifications (PWA)
+    initPWA();
 }
 
 // ========== NAVEGACIÓN ==========
@@ -1768,7 +1771,16 @@ async function loadPacienteSelector() {
         const pacientes = await Storage.getPacientes();
 
         if (isPremium) {
-            // Usuario Premium: dropdown con todos los pacientes
+            // Usuario Premium: restaurar paciente de la sesión anterior o auto-seleccionar si hay uno solo
+            if (!Storage.currentPacienteId) {
+                const saved = localStorage.getItem('cuidadiario_selected_paciente');
+                if (saved && pacientes.find(p => String(p.id) === saved)) {
+                    Storage.currentPacienteId = parseInt(saved);
+                } else if (pacientes.length === 1) {
+                    Storage.currentPacienteId = pacientes[0].id;
+                    localStorage.setItem('cuidadiario_selected_paciente', String(pacientes[0].id));
+                }
+            }
             const currentId = Storage.currentPacienteId;
             const options = pacientes.map(p =>
                 `<option value="${p.id}" ${String(p.id) === String(currentId) ? 'selected' : ''}>${p.nombre}${p.relacion ? ` (${p.relacion})` : ''}</option>`
@@ -1777,7 +1789,7 @@ async function loadPacienteSelector() {
                 <div class="patient-selector-left">
                     <span class="patient-selector-label">&#128100; Viendo:</span>
                     <select id="pacienteSelector" onchange="selectPaciente(this.value)" class="patient-dropdown">
-                        <option value="">Todos los pacientes</option>
+                        <option value="" ${!currentId ? 'selected' : ''}>Todos los pacientes</option>
                         ${options}
                     </select>
                 </div>
@@ -1786,9 +1798,13 @@ async function loadPacienteSelector() {
                 </button>
             `;
         } else {
-            // Usuario Free: mostrar nombre del paciente o invitar a nombrarlo
+            // Usuario Free: auto-seleccionar primer paciente para que paciente_id se asigne correctamente
             const paciente = pacientes[0] || null;
             if (paciente) {
+                // IMPORTANTE: setear currentPacienteId para que los nuevos registros se asignen al paciente
+                if (!Storage.currentPacienteId) {
+                    Storage.currentPacienteId = paciente.id;
+                }
                 contentDiv.innerHTML = `
                     <div class="patient-selector-left">
                         <span class="patient-selector-label">&#128100; Paciente:</span>
@@ -1818,6 +1834,12 @@ async function loadPacienteSelector() {
 
 async function selectPaciente(value) {
     Storage.currentPacienteId = value ? parseInt(value) : null;
+    // Persistir selección para restaurarla al recargar la página
+    if (value) {
+        localStorage.setItem('cuidadiario_selected_paciente', value);
+    } else {
+        localStorage.removeItem('cuidadiario_selected_paciente');
+    }
     const activeSection = document.querySelector('.section.active');
     if (activeSection) await navigateToSection(activeSection.id);
     await loadDashboard();
@@ -2084,6 +2106,196 @@ window.closeProfileModal = closeProfileModal;
 window.saveProfile = saveProfile;
 window.openDashboardModal = openDashboardModal;
 window.deleteHistorialEntry = deleteHistorialEntry;
+
+// ========== PUSH NOTIFICATIONS (PWA) ==========
+
+// Convierte la clave VAPID base64url a Uint8Array (requerido por pushManager.subscribe)
+function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+}
+
+// Verifica el estado actual de las notificaciones y actualiza el botón en el perfil
+async function updatePushToggleUI() {
+    const btn = document.getElementById('pushToggleBtn');
+    const section = document.getElementById('pushNotifSection');
+    if (!btn || !section) return;
+
+    // Si el navegador no soporta push, ocultar la sección
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        section.style.display = 'none';
+        return;
+    }
+
+    try {
+        const reg = await navigator.serviceWorker.ready;
+        const subscription = await reg.pushManager.getSubscription();
+        const permission = Notification.permission;
+
+        if (subscription && permission === 'granted') {
+            btn.textContent = '🔔 Notificaciones activadas — Desactivar';
+            btn.classList.remove('btn-secondary');
+            btn.classList.add('btn-push-active');
+        } else if (permission === 'denied') {
+            btn.textContent = '🔕 Permiso denegado en el navegador';
+            btn.disabled = true;
+            btn.style.opacity = '0.6';
+        } else {
+            btn.textContent = '🔔 Activar notificaciones push';
+            btn.classList.add('btn-secondary');
+            btn.classList.remove('btn-push-active');
+            btn.disabled = false;
+            btn.style.opacity = '';
+        }
+    } catch (err) {
+        console.warn('[Push] Error verificando estado:', err);
+    }
+}
+
+// Toggle principal: suscribir o desuscribir
+async function togglePushNotifications() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        showToast('Tu navegador no soporta notificaciones push', 'error');
+        return;
+    }
+
+    try {
+        const reg = await navigator.serviceWorker.ready;
+        const existing = await reg.pushManager.getSubscription();
+
+        if (existing) {
+            // Ya está suscrito → desuscribir
+            await existing.unsubscribe();
+            try { await API.deletePushSubscription(existing.endpoint); } catch (e) { /* OK */ }
+            showToast('🔕 Notificaciones desactivadas', 'info');
+            await updatePushToggleUI();
+            return;
+        }
+
+        // Pedir permiso
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') {
+            showToast('Permiso denegado. Habilitalo en ajustes del navegador.', 'error');
+            await updatePushToggleUI();
+            return;
+        }
+
+        // Obtener VAPID public key del backend
+        let vapidKey;
+        try {
+            const data = await API.getPushVapidKey();
+            vapidKey = data.publicKey;
+        } catch (e) {
+            // Fallback: usar la clave configurada localmente
+            vapidKey = window.VAPID_PUBLIC_KEY || null;
+        }
+
+        if (!vapidKey) {
+            showToast('El servicio de notificaciones no está configurado aún.', 'error');
+            return;
+        }
+
+        // Suscribir al usuario
+        const subscription = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(vapidKey)
+        });
+
+        // Enviar suscripción al backend
+        await API.savePushSubscription(subscription.toJSON());
+
+        showToast('✅ Notificaciones push activadas', 'success');
+        await updatePushToggleUI();
+
+    } catch (err) {
+        console.error('[Push] Error en toggle:', err);
+        showToast('Error al configurar notificaciones: ' + err.message, 'error');
+    }
+}
+
+// Inicializar PWA: registrar service worker y sincronizar suscripción existente
+async function initPWA() {
+    if (!('serviceWorker' in navigator)) return;
+
+    try {
+        const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+        console.log('[SW] Registrado:', reg.scope);
+
+        // Escuchar mensajes del SW (ej: pushsubscriptionchange)
+        navigator.serviceWorker.addEventListener('message', async (event) => {
+            if (event.data?.type === 'PUSH_SUBSCRIPTION_CHANGED' && event.data.subscription) {
+                try {
+                    await API.savePushSubscription(event.data.subscription);
+                    console.log('[Push] Suscripción actualizada en backend');
+                } catch (e) { /* OK */ }
+            }
+        });
+
+        // Si ya hay una suscripción activa, sincronizarla con el backend
+        const existing = await reg.pushManager.getSubscription();
+        if (existing && Notification.permission === 'granted') {
+            API.savePushSubscription(existing.toJSON()).catch(() => {});
+        }
+
+        // Mostrar banner de notificaciones si aún no se preguntó al usuario
+        if (Notification.permission === 'default') {
+            const shown = localStorage.getItem('cuidadiario_push_banner_shown');
+            if (!shown) {
+                // Mostrar banner sutil después de 8 segundos de uso
+                setTimeout(() => showPushBanner(), 8000);
+            }
+        }
+
+    } catch (err) {
+        console.warn('[SW] No se pudo registrar:', err.message);
+    }
+}
+
+// Mostrar banner sutil invitando a activar notificaciones
+function showPushBanner() {
+    if (document.getElementById('pushBanner')) return;
+    const banner = document.createElement('div');
+    banner.id = 'pushBanner';
+    banner.innerHTML = `
+        <span>🔔 ¿Querés recibir recordatorios aunque tengas la app cerrada?</span>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+            <button onclick="activarPushDesdeBanner()" style="background:#4CAF50;color:#fff;border:none;padding:6px 16px;border-radius:20px;font-weight:600;cursor:pointer;font-size:0.85rem;">Activar</button>
+            <button onclick="cerrarPushBanner()" style="background:none;border:1px solid rgba(255,255,255,0.4);color:rgba(255,255,255,0.85);padding:6px 12px;border-radius:20px;cursor:pointer;font-size:0.85rem;">Ahora no</button>
+        </div>
+    `;
+    banner.style.cssText = `
+        position:fixed; bottom:80px; left:50%; transform:translateX(-50%);
+        background:rgba(30,30,30,0.96); color:#fff;
+        padding:14px 20px; border-radius:14px;
+        font-size:0.88rem; max-width:340px; width:90%;
+        z-index:9999; text-align:center;
+        box-shadow:0 4px 24px rgba(0,0,0,0.4);
+        animation: slideUp 0.3s ease;
+    `;
+    document.body.appendChild(banner);
+    localStorage.setItem('cuidadiario_push_banner_shown', '1');
+}
+
+async function activarPushDesdeBanner() {
+    cerrarPushBanner();
+    await togglePushNotifications();
+}
+
+function cerrarPushBanner() {
+    const b = document.getElementById('pushBanner');
+    if (b) b.remove();
+}
+
+window.togglePushNotifications = togglePushNotifications;
+window.activarPushDesdeBanner = activarPushDesdeBanner;
+window.cerrarPushBanner = cerrarPushBanner;
+window.updatePushToggleUI = updatePushToggleUI;
 
 
 

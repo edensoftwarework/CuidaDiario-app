@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Fondo verde redondeado -->
+  <rect width="512" height="512" rx="96" fill="#4CAF50"/>
+  <!-- Cruz médica blanca -->
+  <rect x="192" y="96" width="128" height="320" rx="24" fill="white"/>
+  <rect x="96" y="192" width="320" height="128" rx="24" fill="white"/>
+  <!-- Corazón pequeño en el centro (superposición verde) -->
+  <path d="M256 290 C256 290 220 265 220 245 C220 232 230 224 240 226 C248 228 256 236 256 236 C256 236 264 228 272 226 C282 224 292 232 292 245 C292 265 256 290 256 290Z" fill="#4CAF50"/>
+</svg>

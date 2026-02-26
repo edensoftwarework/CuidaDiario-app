@@ -1,0 +1,40 @@
+{
+    "name": "CuidaDiario",
+    "short_name": "CuidaDiario",
+    "description": "Asistente de cuidado diario para cuidadores familiares. Gestiona medicamentos, citas, síntomas y tareas.",
+    "start_url": "/",
+    "scope": "/",
+    "display": "standalone",
+    "orientation": "portrait",
+    "theme_color": "#4CAF50",
+    "background_color": "#f5f7f0",
+    "lang": "es",
+    "categories": ["health", "medical", "lifestyle"],
+    "icons": [
+        {
+            "src": "/icon.svg",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "any"
+        },
+        {
+            "src": "/icon.svg",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "maskable"
+        }
+    ],
+    "screenshots": [],
+    "shortcuts": [
+        {
+            "name": "Medicamentos",
+            "url": "/?section=medicamentos",
+            "description": "Ver medicamentos del paciente"
+        },
+        {
+            "name": "Próximas citas",
+            "url": "/?section=citas",
+            "description": "Ver citas programadas"
+        }
+    ]
+}

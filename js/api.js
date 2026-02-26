@@ -438,6 +438,33 @@ const API = {
             body: JSON.stringify(data)
         });
         return this.handleResponse(response);
+    },
+
+    // ==================== PUSH NOTIFICATIONS ====================
+
+    async getPushVapidKey() {
+        const response = await fetch(`${this.BASE_URL}/api/push/vapid-key`, {
+            headers: this.getHeaders()
+        });
+        return this.handleResponse(response);
+    },
+
+    async savePushSubscription(subscription) {
+        const response = await fetch(`${this.BASE_URL}/api/push/subscribe`, {
+            method: 'POST',
+            headers: this.getHeaders(),
+            body: JSON.stringify(subscription)
+        });
+        return this.handleResponse(response);
+    },
+
+    async deletePushSubscription(endpoint) {
+        const response = await fetch(`${this.BASE_URL}/api/push/unsubscribe`, {
+            method: 'DELETE',
+            headers: this.getHeaders(),
+            body: JSON.stringify({ endpoint })
+        });
+        return this.handleResponse(response);
     }
 };
 
