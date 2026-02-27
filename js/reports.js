@@ -283,31 +283,6 @@ const Reports = {
     },
 
     /**
-     * Exportar datos como JSON
-     */
-    async exportarDatos() {
-        if (!Storage.getPremiumStatus()) {
-            showPremiumModal();
-            return;
-        }
-
-        const data = await Storage.exportData();
-        const json = JSON.stringify(data, null, 2);
-        const blob = new Blob([json], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `cuidadiario-backup-${new Date().toISOString().split('T')[0]}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-
-        alert('✓ Datos exportados correctamente');
-    },
-
-    /**
      * Exportar datos como CSV (compatible con Excel / Google Sheets)
      */
     async exportarCSV() {
@@ -399,40 +374,6 @@ const Reports = {
             console.error('Error exportando CSV:', err);
             if (window.showToast) showToast('Error al exportar CSV', 'error');
         }
-    },
-
-    /**
-     * Importar datos desde JSON
-     */
-    importarDatos(event) {
-        if (!Storage.getPremiumStatus()) {
-            showPremiumModal();
-            return;
-        }
-
-        const file = event.target.files[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            try {
-                const data = JSON.parse(e.target.result);
-                
-                if (confirm('¿Estás seguro de que quieres importar estos datos? Esto sobrescribirá los datos actuales.')) {
-                    const success = Storage.importAllData(data);
-                    if (success) {
-                        alert('✓ Datos importados correctamente');
-                        location.reload();
-                    } else {
-                        alert('✗ Error al importar datos');
-                    }
-                }
-            } catch (error) {
-                console.error('Error al leer archivo:', error);
-                alert('✗ Error: Archivo no válido');
-            }
-        };
-        reader.readAsText(file);
     },
 
     /**
@@ -593,9 +534,7 @@ const Reports = {
 window.generarReporteCompleto = () => Reports.generarReporteCompleto();
 window.generarReporteMedicamentos = () => Reports.generarReporteMedicamentos();
 window.generarReporteMedico = () => Reports.generarReporteMedico();
-window.exportarDatos = () => Reports.exportarDatos();
 window.exportarCSV   = () => Reports.exportarCSV();
-window.importarDatos = (event) => Reports.importarDatos(event);
 
 window.Reports = Reports;
 

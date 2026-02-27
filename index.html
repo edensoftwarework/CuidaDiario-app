@@ -247,7 +247,7 @@
                     <div class="section-lock-icon">&#128274;</div>
                     <h3>Funcionalidad Premium</h3>
                     <p>El seguimiento de síntomas y signos vitales está disponible exclusivamente en el plan Premium.</p>
-                    <button class="btn-premium-cta" onclick="showPremiumModal()">Suscribirse por $4.000/mes</button>
+                    <button class="btn-premium-cta" onclick="showPremiumModal()">Suscribirse por $3.500/mes</button>
                     <p class="section-lock-note">Plan mensual &middot; Cancela cuando quieras</p>
                 </div>
 
@@ -364,7 +364,7 @@
                     <div class="section-lock-icon">&#128274;</div>
                     <h3>Funcionalidad Premium</h3>
                     <p>Los reportes, historial completo y exportación de datos están disponibles en el plan Premium.</p>
-                    <button class="btn-premium-cta" onclick="showPremiumModal()">Suscribirse por $4.000/mes</button>
+                    <button class="btn-premium-cta" onclick="showPremiumModal()">Suscribirse por $3.500/mes</button>
                     <p class="section-lock-note">Plan mensual &middot; Cancela cuando quieras</p>
                 </div>
 
@@ -394,25 +394,14 @@
                         </div>
                     </div>
 
-                    <!-- Exportar/Importar datos -->
+                    <!-- Exportar datos -->
                     <div class="data-management">
                         <h3>Gestión de Datos</h3>
                         <div class="data-actions">
                             <div class="data-action-card">
-                                <h4>📥 Exportar JSON</h4>
-                                <p>Descarga todos tus datos en formato JSON (backup completo)</p>
-                                <button class="btn-secondary" onclick="exportarDatos()">Exportar JSON</button>
-                            </div>
-                            <div class="data-action-card">
-                                <h4>📊 Exportar CSV</h4>
-                                <p>Exporta tus datos como planilla (compatible con Excel)</p>
-                                <button class="btn-secondary" onclick="exportarCSV()">Exportar CSV</button>
-                            </div>
-                            <div class="data-action-card">
-                                <h4>📤 Importar Datos</h4>
-                                <p>Importa datos desde un archivo JSON</p>
-                                <input type="file" id="importFile" accept=".json" style="display:none" onchange="importarDatos(event)">
-                                <button class="btn-secondary" onclick="document.getElementById('importFile').click()">Importar</button>
+                                <h4>📊 Exportar a Excel / CSV</h4>
+                                <p>Exporta todos tus datos como planilla (compatible con Excel y Google Sheets)</p>
+                                <button class="btn-secondary" onclick="exportarCSV()">Exportar Excel / CSV</button>
                             </div>
                             <div class="data-action-card warning">
                                 <h4>🗑️ Eliminar Todos los Datos</h4>
@@ -839,19 +828,18 @@
                         <li>&#10003; <strong>Seguimiento completo</strong> de síntomas y signos vitales</li>
                         <li>&#10003; Historial completo y <strong>reportes exportables</strong></li>
                         <li>&#10003; Agenda de contactos ampliada</li>
-                        <li>&#10003; Exportación e importación de datos</li>
-                        <li>&#10003; Soporte prioritario</li>
+                        <li>&#10003; Exportación de datos en <strong>Excel / CSV</strong></li>
                     </ul>
                 </div>
                 <div class="premium-pricing">
                     <div class="price-card" style="max-width:380px; margin:0 auto;">
                         <h4>🌎 Suscripción mensual</h4>
-                        <div class="price">$4.000 ARS<span style="font-size:0.55em;font-weight:400">/mes</span></div>
+                        <div class="price">$3.500 ARS<span style="font-size:0.55em;font-weight:400">/mes</span></div>
                         <p class="price-detail">Cancelá cuando quieras</p>
                         <p style="font-size:0.82em; color:#a8e6cf; background:rgba(168,230,207,0.1); border-radius:8px; padding:8px 10px; margin:10px 0 8px; line-height:1.5;">
                             💳 Podés pagar con <strong>tarjeta de crédito o débito</strong> (Visa, Mastercard, etc.) sin necesitar cuenta en MercadoPago.
                         </p>
-                        <button class="btn-payment" onclick="procesarPago('mercadopago', 'ARS', 4000)">
+                        <button class="btn-payment" onclick="procesarPago('mercadopago', 'ARS', 3500)">
                             Suscribirse — Pagar con tarjeta o MercadoPago
                         </button>
                         <p style="font-size:0.75em; color:rgba(255,255,255,0.5); margin-top:8px;">
@@ -868,7 +856,7 @@
                     -->
                 </div>
                 <p class="premium-guarantee">
-                    🔒 Pago seguro &nbsp;|&nbsp; 🔄 Renovación mensual &nbsp;|&nbsp; 📧 Soporte incluido
+                    🔒 Pago seguro &nbsp;|&nbsp; 🔄 Renovación mensual &nbsp;|&nbsp; ❌ Cancela cuando quieras
                 </p>
             </div>
         </div>

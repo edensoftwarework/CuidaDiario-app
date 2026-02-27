@@ -1368,7 +1368,7 @@ async function loadContactos(filter = 'todos') {
     const isPremium = Storage.getPremiumStatus();
     
     const warningDiv = document.getElementById('contactosPremiumWarning');
-    if (!isPremium && limits.contactos.count >= 3) {
+    if (!isPremium && limits.contactos.exceeded) {
         warningDiv.style.display = 'block';
     } else {
         warningDiv.style.display = 'none';

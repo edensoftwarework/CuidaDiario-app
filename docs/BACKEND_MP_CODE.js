@@ -62,7 +62,7 @@ app.post('/api/create-subscription', authMiddleware, async (req, res) => {
             auto_recurring: {
                 frequency: 1,
                 frequency_type: 'months',
-                transaction_amount: 4000,
+                transaction_amount: 3500,
                 currency_id: 'ARS'
             },
             back_url: 'https://cuidadiario.edensoftwork.com/pages/premium-success.html',

@@ -83,7 +83,6 @@ const I18N_TRANSLATIONS = {
         'onb.skip':    'Saltar introducción',
 
         /* ── Exportar ── */
-        'export.json': '📥 Exportar JSON (backup)',
         'export.csv':  '📊 Exportar CSV (Excel)',
     },
 
@@ -158,7 +157,6 @@ const I18N_TRANSLATIONS = {
         'onb.skip':    'Skip intro',
 
         /* ── Export ── */
-        'export.json': '📥 Export JSON (backup)',
         'export.csv':  '📊 Export CSV (Excel)',
     }
 };
@@ -244,7 +242,6 @@ const I18n = {
         this._applyId('onbSkipBtn', 'onb.skip');
 
         // 5. Export buttons
-        this._applyId('exportJsonBtn', 'export.json');
         this._applyId('exportCsvBtn',  'export.csv');
 
         // 6. Botón de idioma
