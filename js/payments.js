@@ -44,9 +44,10 @@ const Payments = {
             case 'mercadopago':
                 this.initMercadoPago(currency, amount);
                 break;
-            case 'paypal':
-                this.initPayPal(currency, amount);
-                break;
+            // PAYPAL — deshabilitado temporalmente (restricciones para Argentina)
+            // case 'paypal':
+            //     this.initPayPal(currency, amount);
+            //     break;
             case 'stripe':
                 this.initStripe(currency, amount);
                 break;
@@ -106,33 +107,24 @@ const Payments = {
         }
     },
 
-    /**
-     * Inicializar botón de suscripción mensual con PayPal
-     * Se renderiza directamente en #paypal-subscribe-button del HTML.
-     * Carga el SDK dinámicamente usando window.PAYPAL_CLIENT_ID y window.PAYPAL_PLAN_ID
-     * (ambos se configuran en index.html — 2 valores a cambiar para pasar a producción).
-     */
+    /* PAYPAL — deshabilitado temporalmente (restricciones para Argentina)
+     * Para reactivar: descomentar este bloque, habilitar window.PAYPAL_CLIENT_ID/PLAN_ID en index.html
+     * y descomentar los endpoints PayPal en el backend (index-COMPLETE.js)
+     *
     async initPayPalSubscriptionButton() {
         const container = document.getElementById('paypal-subscribe-button');
         if (!container) return;
-
         const clientId = window.PAYPAL_CLIENT_ID;
         const planId   = window.PAYPAL_PLAN_ID;
-
         if (!clientId || !planId) {
             console.warn('[PayPal] PAYPAL_CLIENT_ID o PAYPAL_PLAN_ID no configurados en index.html');
             return;
         }
-
-        // Cargar SDK dinámicamente si aún no está cargado
         if (!window.paypal) {
             await new Promise((resolve, reject) => {
-                // Evitar doble-carga si el script ya está en proceso
                 const existing = document.querySelector('script[src*="paypal.com/sdk"]');
                 if (existing) {
-                    const poll = setInterval(() => {
-                        if (window.paypal) { clearInterval(poll); resolve(); }
-                    }, 80);
+                    const poll = setInterval(() => { if (window.paypal) { clearInterval(poll); resolve(); } }, 80);
                     return;
                 }
                 const s = document.createElement('script');
@@ -142,14 +134,10 @@ const Payments = {
                 document.head.appendChild(s);
             });
         }
-
         if (!window.paypal) return;
-
         paypal.Buttons({
             style: { layout: 'vertical', color: 'blue', shape: 'rect', label: 'subscribe' },
-            createSubscription: (data, actions) => {
-                return actions.subscription.create({ plan_id: planId });
-            },
+            createSubscription: (data, actions) => { return actions.subscription.create({ plan_id: planId }); },
             onApprove: async (data) => {
                 if (typeof showToast === 'function') showToast('¡Suscripción activa! Activando Premium...', 'success', 4000);
                 const token = API.getToken();
@@ -168,18 +156,11 @@ const Payments = {
                 console.error('Error en PayPal:', err);
                 if (typeof showToast === 'function') showToast('Error al procesar el pago con PayPal', 'error');
             },
-            onCancel: () => {
-                if (typeof showToast === 'function') showToast('Suscripción cancelada', 'info');
-            }
+            onCancel: () => { if (typeof showToast === 'function') showToast('Suscripción cancelada', 'info'); }
         }).render('#paypal-subscribe-button');
     },
-
-    /**
-     * initPayPal — mantiene compatibilidad con llamadas existentes
-     */
-    async initPayPal(currency, amount) {
-        // El botón ya está renderizado en #paypal-subscribe-button por initPayPalSubscriptionButton()
-    },
+    async initPayPal(currency, amount) {},
+    */
 
     /**
      * Cargar SDK de Stripe dinámicamente
@@ -314,21 +295,13 @@ const Payments = {
             window.history.replaceState({}, document.title, window.location.pathname);
         }
 
-        // PayPal
-        const ppToken = urlParams.get('token');
-        const ppPayerId = urlParams.get('PayerID');
-        
-        if (ppToken && ppPayerId) {
-            // En producción, verificar con el backend
-            this.handleSuccessfulPayment({
-                method: 'paypal',
-                transactionId: ppToken,
-                amount: this.prices.USD,
-                currency: 'USD'
-            });
-            
-            window.history.replaceState({}, document.title, window.location.pathname);
-        }
+        // PAYPAL — deshabilitado temporalmente
+        // const ppToken = urlParams.get('token');
+        // const ppPayerId = urlParams.get('PayerID');
+        // if (ppToken && ppPayerId) {
+        //     this.handleSuccessfulPayment({ method: 'paypal', transactionId: ppToken, amount: this.prices.USD, currency: 'USD' });
+        //     window.history.replaceState({}, document.title, window.location.pathname);
+        // }
 
         // Stripe
         const stripeSuccess = urlParams.get('stripe_success');
@@ -388,11 +361,11 @@ const Payments = {
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
         Payments.checkPaymentFromURL();
-        Payments.initPayPalSubscriptionButton();
+        // Payments.initPayPalSubscriptionButton(); // PAYPAL — deshabilitado temporalmente
     });
 } else {
     Payments.checkPaymentFromURL();
-    Payments.initPayPalSubscriptionButton();
+    // Payments.initPayPalSubscriptionButton(); // PAYPAL — deshabilitado temporalmente
 }
 
 // Exponer función global para usar desde HTML

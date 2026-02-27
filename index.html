@@ -844,26 +844,28 @@
                     </ul>
                 </div>
                 <div class="premium-pricing">
-                    <div class="price-card">
-                        <h4>🇦🇷 Argentina</h4>
+                    <div class="price-card" style="max-width:380px; margin:0 auto;">
+                        <h4>🌎 Suscripción mensual</h4>
                         <div class="price">$4.000 ARS<span style="font-size:0.55em;font-weight:400">/mes</span></div>
-                        <p class="price-detail">Suscripción mensual — cancelá cuando quieras</p>
-                        <p style="font-size:0.78em; color:#f0c040; background:rgba(240,192,64,0.1); border-radius:8px; padding:8px 10px; margin:10px 0 8px; line-height:1.5;">
-                            ⚠️ <strong>Importante:</strong> el e-mail de tu cuenta CuidaDiario debe coincidir con el de tu cuenta MercadoPago para poder suscribirte.
+                        <p class="price-detail">Cancelá cuando quieras</p>
+                        <p style="font-size:0.82em; color:#a8e6cf; background:rgba(168,230,207,0.1); border-radius:8px; padding:8px 10px; margin:10px 0 8px; line-height:1.5;">
+                            💳 Podés pagar con <strong>tarjeta de crédito o débito</strong> (Visa, Mastercard, etc.) sin necesitar cuenta en MercadoPago.
                         </p>
                         <button class="btn-payment" onclick="procesarPago('mercadopago', 'ARS', 4000)">
-                            Suscribirse con MercadoPago
+                            Suscribirse — Pagar con tarjeta o MercadoPago
                         </button>
                         <p style="font-size:0.75em; color:rgba(255,255,255,0.5); margin-top:8px;">
                             Para cancelar: ingresá a MercadoPago → Mis suscripciones
                         </p>
                     </div>
+                    <!-- PAYPAL — deshabilitado temporalmente (restricciones para Argentina)
                     <div class="price-card">
                         <h4>🌎 Internacional</h4>
                         <div class="price">$3 USD<span style="font-size:0.55em;font-weight:400">/mes</span></div>
                         <p class="price-detail">Monthly subscription — cancel any time</p>
                         <div id="paypal-subscribe-button" style="margin-top: 12px;"></div>
                     </div>
+                    -->
                 </div>
                 <p class="premium-guarantee">
                     🔒 Pago seguro &nbsp;|&nbsp; 🔄 Renovación mensual &nbsp;|&nbsp; 📧 Soporte incluido
@@ -1082,11 +1084,10 @@
         // (la misma que ponés en VAPID_PUBLIC_KEY en Railway)
         window.VAPID_PUBLIC_KEY = 'BKLi3JMrb-Kj-ATqHmAGpbuDXNVryvNkc5_iBUBb-P7pli11rJ_eu330y8EzmduKN02yjvKNDe8n4b5Lv83sUAo';
 
-        // ─── PayPal ─── Para pasar a PRODUCCIÓN reemplazá ambos valores:
-        //   1. PAYPAL_CLIENT_ID → Live Client ID (de developer.paypal.com → Live)
-        //   2. PAYPAL_PLAN_ID   → ID del plan de suscripción creado en modo Live
-        window.PAYPAL_CLIENT_ID = 'AWwVGYftSyo3LPqMk5W5bArcczV12irsYNF0ckLztk-tAm5lJkyFyr83LtWx9uPinefZNQ1MflRt3GMD'; // live
-        window.PAYPAL_PLAN_ID   = 'P-2R507102RC623971WNGQZRXY'; // live plan id
+        // ─── PayPal ─── deshabilitado temporalmente (restricciones para Argentina)
+        // Para reactivar, descomentar las siguientes líneas y habilitar el código PayPal en payments.js:
+        // window.PAYPAL_CLIENT_ID = 'AWwVGYftSyo3LPqMk5W5bArcczV12irsYNF0ckLztk-tAm5lJkyFyr83LtWx9uPinefZNQ1MflRt3GMD'; // live
+        // window.PAYPAL_PLAN_ID   = 'P-2R507102RC623971WNGQZRXY'; // live plan id
 
         // Animación para el banner push
         const style = document.createElement('style');
