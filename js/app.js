@@ -41,6 +41,20 @@ async function initApp() {
     // Registrar Service Worker y configurar Push Notifications (PWA)
     initPWA();
 
+    // Mostrar banner de notificaciones push si el usuario nunca lo activó
+    // (solo si está autenticado y el navegador soporta push)
+    if (API.isAuthenticated() && 'serviceWorker' in navigator && 'PushManager' in window) {
+        const pushBannerShown = localStorage.getItem('cuidadiario_push_banner_shown');
+        if (!pushBannerShown && Notification.permission === 'default') {
+            // Esperar a que initPWA intente el request automático (2s), luego mostrar banner si no se activó
+            setTimeout(async () => {
+                if (Notification.permission === 'default') {
+                    showPushBanner();
+                }
+            }, 5000);
+        }
+    }
+
     // Aplicar traducciones según idioma guardado
     if (window.I18n) I18n.apply();
 

@@ -163,21 +163,18 @@ const Notifications = {
 
     /**
      * Obtener horarios de un medicamento
+     * Si no tiene hora_inicio, usa horarios por defecto según frecuencia
+     * (comenzando a las 08:00 y sin pasar de las 22:00)
      * @param {Object} medicamento
      * @returns {Array} - Array de horarios en formato HH:MM
      */
     getMedicamentoHorarios(medicamento) {
-        const horarios = [];
-        
-        if (medicamento.frecuencia === 'custom' && medicamento.horariosCustom) {
-            return medicamento.horariosCustom.split(',').map(h => h.trim());
+        // Horarios personalizados explícitos
+        if (medicamento.frecuencia === 'custom') {
+            const custom = medicamento.horariosCustom || medicamento.horarios_custom;
+            if (custom) return custom.split(',').map(h => h.trim()).filter(Boolean);
         }
 
-        const horaInicioStr = medicamento.hora_inicio || medicamento.horaInicio;
-        if (!horaInicioStr) return horarios;
-
-        const [hora, minutos] = horaInicioStr.split(':').map(Number);
-        
         const frecuencias = {
             'cada-4h': 4,
             'cada-6h': 6,
@@ -185,16 +182,25 @@ const Notifications = {
             'cada-12h': 12,
             'diaria': 24
         };
-
         const intervalo = frecuencias[medicamento.frecuencia] || 24;
-        let currentHora = hora;
 
-        // Generar horarios del día
-        while (currentHora < 24) {
-            horarios.push(`${String(currentHora).padStart(2, '0')}:${String(minutos).padStart(2, '0')}`);
-            currentHora += intervalo;
+        // Si tiene hora_inicio la usamos; si no, arrancamos a las 08:00
+        const horaInicioStr = medicamento.hora_inicio || medicamento.horaInicio || '08:00';
+        const [hStr, mStr] = horaInicioStr.split(':');
+        const horaInicio = parseInt(hStr) || 8;
+        const minInicio  = parseInt(mStr) || 0;
+
+        const horarios = [];
+        let h = horaInicio;
+        // Generar horarios hasta las 22:00 (10 PM) para no molestar de noche
+        while (h < 22) {
+            horarios.push(`${String(h).padStart(2, '0')}:${String(minInicio).padStart(2, '0')}`);
+            h += intervalo;
         }
-
+        // Asegurar al menos un horario aunque el inicio sea >= 22
+        if (horarios.length === 0) {
+            horarios.push(`${String(horaInicio).padStart(2, '0')}:${String(minInicio).padStart(2, '0')}`);
+        }
         return horarios;
     },
 

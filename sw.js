@@ -8,7 +8,7 @@
  *  - Notification click (abre la app o enfoca la pestaña)
  */
 
-const CACHE_NAME = 'cuidadiario-v2';
+const CACHE_NAME = 'cuidadiario-v3';
 const ASSETS = [
     '/',
     '/index.html',
@@ -90,10 +90,11 @@ self.addEventListener('push', (event) => {
         body: payload.body,
         icon: payload.icon || '/icon.svg',
         badge: '/icon.svg',
-        vibrate: [200, 100, 200, 100, 300],
+        vibrate: [200, 100, 200, 100, 300, 100, 300],
         tag: payload.tag || 'cuidadiario-notif',
         renotify: true,
-        requireInteraction: false,
+        requireInteraction: true,   // ← CRÍTICO: la notificación persiste hasta que el usuario la descarte
+        silent: false,              // ← Asegura que reproduzca sonido/vibración
         data: { url: payload.url || '/' },
         actions: [
             { action: 'abrir', title: '📋 Abrir app' },
