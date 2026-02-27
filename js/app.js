@@ -1661,8 +1661,51 @@ function showWelcomeBannerIfNeeded() {
         if (banner) {
             banner.style.display = 'block';
         }
+        // Usuario nuevo: mostrar invitación a instalar la app después de 5 segundos
+        setTimeout(() => showA2HSWelcome(), 5000);
     }
 }
+
+// Muestra banner de bienvenida invitando a instalar la app (solo usuarios nuevos)
+function showA2HSWelcome() {
+    if (document.getElementById('a2hsBanner')) return;
+    // Si ya está instalada como PWA, no mostrar
+    if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) return;
+
+    const banner = document.createElement('div');
+    banner.id = 'a2hsBanner';
+    banner.innerHTML = `
+        <div style="font-size:1.8rem;margin-bottom:6px;">📲</div>
+        <strong style="font-size:1rem;">¡Bienvenido/a a CuidaDiario!</strong>
+        <p style="margin:8px 0 14px;font-size:0.85rem;opacity:0.9;line-height:1.4;">
+            Para recibir notificaciones y acceder más rápido, instalá la app en tu celular.
+        </p>
+        <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
+            <button onclick="triggerA2HS();cerrarA2HSBanner()" style="background:#fff;color:#667eea;border:none;padding:8px 18px;border-radius:20px;font-weight:700;cursor:pointer;font-size:0.85rem;">
+                Instalar app
+            </button>
+            <button onclick="cerrarA2HSBanner()" style="background:none;border:1px solid rgba(255,255,255,0.5);color:rgba(255,255,255,0.9);padding:8px 14px;border-radius:20px;cursor:pointer;font-size:0.85rem;">
+                Ahora no
+            </button>
+        </div>
+    `;
+    banner.style.cssText = `
+        position:fixed; bottom:80px; left:50%; transform:translateX(-50%);
+        background:linear-gradient(135deg,#667eea,#764ba2);
+        color:#fff; padding:20px 22px; border-radius:16px;
+        font-size:0.9rem; max-width:320px; width:90%;
+        z-index:9999; text-align:center;
+        box-shadow:0 6px 32px rgba(102,126,234,0.4);
+        animation: slideUp 0.3s ease;
+    `;
+    document.body.appendChild(banner);
+}
+
+function cerrarA2HSBanner() {
+    const b = document.getElementById('a2hsBanner');
+    if (b) b.remove();
+}
+window.cerrarA2HSBanner = cerrarA2HSBanner;
 
 function closeWelcomeBanner() {
     document.getElementById('welcomeBanner').style.display = 'none';
