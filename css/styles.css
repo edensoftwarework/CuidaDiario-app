@@ -2015,3 +2015,106 @@ body {
         background: white;
     }
 }
+
+/* ===========================================
+   MENÚ DE CONFIGURACIÓN (gear icon dropdown)
+   =========================================== */
+.settings-wrap {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.settings-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: none;
+    border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 50%;
+    color: var(--text-light);
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s, transform 0.28s cubic-bezier(.34,1.56,.64,1);
+    padding: 0;
+}
+.settings-btn:hover { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.5); }
+.settings-btn.open  { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.5); transform: rotate(55deg); }
+
+.settings-menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 10px);
+    background: #1b2735;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 14px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.55), 0 2px 8px rgba(0,0,0,0.2);
+    min-width: 222px;
+    z-index: 9500;
+    overflow: hidden;
+    transform-origin: top right;
+    animation: smIn 0.18s cubic-bezier(.22,1,.36,1);
+}
+@keyframes smIn {
+    from { opacity: 0; transform: scale(0.93) translateY(-6px); }
+    to   { opacity: 1; transform: scale(1)    translateY(0);    }
+}
+
+.settings-menu-header {
+    padding: 11px 16px 7px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.9px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.32);
+}
+
+.settings-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    width: 100%;
+    padding: 11px 16px;
+    background: none;
+    border: none;
+    color: #cdd6e0;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s, color 0.15s;
+    line-height: 1;
+    font-family: inherit;
+}
+.settings-menu-item:hover { background: rgba(255,255,255,0.09); color: #fff; }
+.settings-menu-item .sm-icon { font-size: 1.05rem; width: 22px; text-align: center; flex-shrink: 0; line-height: 1; }
+
+.settings-menu-divider { height: 1px; background: rgba(255,255,255,0.08); margin: 4px 16px; }
+
+/* Botones de selección de idioma (en modal de idioma) */
+.btn-lang-option {
+    display: flex;
+    align-items: center;
+    gap: 13px;
+    width: 100%;
+    padding: 14px 18px;
+    border-radius: 10px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 2px solid var(--border-color);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    text-align: left;
+    font-family: inherit;
+}
+.btn-lang-option.active-lang {
+    border-color: var(--primary-color);
+    background: rgba(76,175,80,0.08);
+    color: var(--primary-dark);
+}
+.btn-lang-option:hover:not(.active-lang) {
+    border-color: var(--primary-light);
+    background: rgba(76,175,80,0.04);
+}

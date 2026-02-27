@@ -1853,6 +1853,17 @@ function setupEventListeners() {
             }
         });
     });
+
+    // Cerrar menú de configuración al hacer clic fuera de él
+    document.addEventListener('click', (e) => {
+        const wrap = document.getElementById('settingsWrap');
+        if (wrap && !wrap.contains(e.target)) {
+            const menu = document.getElementById('settingsMenu');
+            const btn  = document.getElementById('settingsBtn');
+            if (menu) menu.style.display = 'none';
+            if (btn)  btn.classList.remove('open');
+        }
+    });
 }
 
 async function loadAllSections() {
@@ -2166,16 +2177,11 @@ function openProfileModal() {
     document.getElementById('profileEmail').value = user.email || '';
     document.getElementById('profilePassword').value = '';
     document.getElementById('profilePasswordConfirm').value = '';
-    // Cargar timezone guardada
     const tzSelect = document.getElementById('profileTimezone');
     if (tzSelect) tzSelect.value = user.timezone || 'America/Argentina/Buenos_Aires';
-    // Mostrar info premium si aplica
     const premiumInfo = document.getElementById('profilePremiumInfo');
     if (premiumInfo) premiumInfo.style.display = Storage.getPremiumStatus() ? 'block' : 'none';
     document.getElementById('profileModal').classList.add('active');
-    // Actualizar estado de push notifications y botón A2HS al abrir el modal
-    updatePushToggleUI();
-    updateA2HSButton();
 }
 
 function closeProfileModal() {
@@ -2514,6 +2520,83 @@ window.updatePushToggleUI = updatePushToggleUI;
 window.triggerA2HS = triggerA2HS;
 window.updateA2HSButton = updateA2HSButton;
 
+// ========== MENÚ DE CONFIGURACIÓN ==========
 
+function toggleSettingsMenu() {
+    const menu = document.getElementById('settingsMenu');
+    const btn  = document.getElementById('settingsBtn');
+    if (!menu) return;
+    const willOpen = menu.style.display === 'none';
+    menu.style.display = willOpen ? 'block' : 'none';
+    if (btn) btn.classList.toggle('open', willOpen);
+}
 
+function closeSettingsMenu() {
+    const menu = document.getElementById('settingsMenu');
+    const btn  = document.getElementById('settingsBtn');
+    if (menu) menu.style.display = 'none';
+    if (btn)  btn.classList.remove('open');
+}
 
+/**
+ * Abre el modal de configuración correspondiente al tipo indicado.
+ * type: 'account' | 'notif' | 'install' | 'lang'
+ */
+function openSettingsModal(type) {
+    closeSettingsMenu();
+    switch (type) {
+        case 'account':
+            openProfileModal();
+            break;
+        case 'notif': {
+            const m = document.getElementById('settingsNotifModal');
+            if (m) {
+                m.classList.add('active');
+                updatePushToggleUI();
+            }
+            break;
+        }
+        case 'install': {
+            const m = document.getElementById('settingsInstallModal');
+            if (m) {
+                m.classList.add('active');
+                updateA2HSButton();
+            }
+            break;
+        }
+        case 'lang':
+            _openLangModal();
+            break;
+    }
+}
+
+function _openLangModal() {
+    const modal = document.getElementById('settingsLangModal');
+    if (!modal) return;
+    modal.classList.add('active');
+    const lang = (window.I18n?.lang) || localStorage.getItem('cuidadiario_lang') || 'es';
+    const esBtn = document.getElementById('langEsBtn');
+    const enBtn = document.getElementById('langEnBtn');
+    const desc  = document.getElementById('langCurrentDesc');
+    if (esBtn) esBtn.classList.toggle('active-lang', lang === 'es');
+    if (enBtn) enBtn.classList.toggle('active-lang', lang === 'en');
+    if (desc)  desc.textContent = lang === 'es'
+        ? 'Idioma actual: Español 🇦🇷'
+        : 'Current language: English 🇬🇧';
+}
+
+function selectLanguage(lang) {
+    if (window.I18n) I18n.setLanguage(lang);
+    _openLangModal(); // refresca estado activo de botones
+    // Cerrar el modal después de un breve momento
+    setTimeout(() => {
+        const modal = document.getElementById('settingsLangModal');
+        if (modal) modal.classList.remove('active');
+    }, 700);
+    showToast(lang === 'es' ? '🇦🇷 Idioma: Español' : '🇬🇧 Language: English', 'success');
+}
+
+window.toggleSettingsMenu = toggleSettingsMenu;
+window.closeSettingsMenu  = closeSettingsMenu;
+window.openSettingsModal  = openSettingsModal;
+window.selectLanguage     = selectLanguage;

@@ -108,56 +108,65 @@ const Payments = {
 
     /**
      * Inicializar botón de suscripción mensual con PayPal
-     * Se renderiza directamente en #paypal-subscribe-button del HTML
+     * Se renderiza directamente en #paypal-subscribe-button del HTML.
+     * Carga el SDK dinámicamente usando window.PAYPAL_CLIENT_ID y window.PAYPAL_PLAN_ID
+     * (ambos se configuran en index.html — 2 valores a cambiar para pasar a producción).
      */
-    initPayPalSubscriptionButton() {
-        if (!window.paypal) return;
+    async initPayPalSubscriptionButton() {
         const container = document.getElementById('paypal-subscribe-button');
         if (!container) return;
 
+        const clientId = window.PAYPAL_CLIENT_ID;
+        const planId   = window.PAYPAL_PLAN_ID;
+
+        if (!clientId || !planId) {
+            console.warn('[PayPal] PAYPAL_CLIENT_ID o PAYPAL_PLAN_ID no configurados en index.html');
+            return;
+        }
+
+        // Cargar SDK dinámicamente si aún no está cargado
+        if (!window.paypal) {
+            await new Promise((resolve, reject) => {
+                // Evitar doble-carga si el script ya está en proceso
+                const existing = document.querySelector('script[src*="paypal.com/sdk"]');
+                if (existing) {
+                    const poll = setInterval(() => {
+                        if (window.paypal) { clearInterval(poll); resolve(); }
+                    }, 80);
+                    return;
+                }
+                const s = document.createElement('script');
+                s.src = `https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(clientId)}&vault=true&intent=subscription`;
+                s.onload  = resolve;
+                s.onerror = () => { console.error('[PayPal] Error cargando SDK'); reject(new Error('PayPal SDK load error')); };
+                document.head.appendChild(s);
+            });
+        }
+
+        if (!window.paypal) return;
+
         paypal.Buttons({
-            style: {
-                layout: 'vertical',
-                color: 'blue',
-                shape: 'rect',
-                label: 'subscribe'
-            },
+            style: { layout: 'vertical', color: 'blue', shape: 'rect', label: 'subscribe' },
             createSubscription: (data, actions) => {
-                return actions.subscription.create({
-                    plan_id: 'P-3X388787GJ031361LNGPC3HY' // SANDBOX — reemplazar por plan_id de producción cuando corresponda
-                });
+                return actions.subscription.create({ plan_id: planId });
             },
             onApprove: async (data) => {
                 if (typeof showToast === 'function') showToast('¡Suscripción activa! Activando Premium...', 'success', 4000);
-
-                // Notificar al backend para activar premium
                 const token = API.getToken();
                 if (token) {
                     try {
                         await fetch(`${API.BASE_URL}/api/paypal/activate-subscription`, {
                             method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${token}`
-                            },
+                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                             body: JSON.stringify({ subscriptionID: data.subscriptionID })
                         });
-                    } catch (e) {
-                        console.error('Error activando premium:', e);
-                    }
+                    } catch (e) { console.error('Error activando premium:', e); }
                 }
-
-                this.handleSuccessfulPayment({
-                    method: 'paypal',
-                    transactionId: data.subscriptionID,
-                    amount: 3,
-                    currency: 'USD'
-                });
+                this.handleSuccessfulPayment({ method: 'paypal', transactionId: data.subscriptionID, amount: 3, currency: 'USD' });
             },
             onError: (err) => {
                 console.error('Error en PayPal:', err);
                 if (typeof showToast === 'function') showToast('Error al procesar el pago con PayPal', 'error');
-                else alert('Error al procesar el pago con PayPal');
             },
             onCancel: () => {
                 if (typeof showToast === 'function') showToast('Suscripción cancelada', 'info');
@@ -169,12 +178,11 @@ const Payments = {
      * initPayPal — mantiene compatibilidad con llamadas existentes
      */
     async initPayPal(currency, amount) {
-        // El botón ya está renderizado en #paypal-subscribe-button directamente en el HTML
-        // Esta función ya no es necesaria con el flujo de suscripción
+        // El botón ya está renderizado en #paypal-subscribe-button por initPayPalSubscriptionButton()
     },
 
     /**
-     * Inicializar pago con Stripe
+     * Cargar SDK de Stripe dinámicamente
      */
     async initStripe(currency, amount) {
         try {
@@ -336,19 +344,6 @@ const Payments = {
             
             window.history.replaceState({}, document.title, window.location.pathname);
         }
-    },
-
-    /**
-     * Cargar SDK de PayPal dinámicamente
-     */
-    loadPayPalSDK(currency = 'USD') {
-        return new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = `https://www.paypal.com/sdk/js?client-id=${this.config.paypal.clientId}&currency=${currency}`;
-            script.onload = resolve;
-            script.onerror = reject;
-            document.head.appendChild(script);
-        });
     },
 
     /**
