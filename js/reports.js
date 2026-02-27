@@ -308,6 +308,100 @@ const Reports = {
     },
 
     /**
+     * Exportar datos como CSV (compatible con Excel / Google Sheets)
+     */
+    async exportarCSV() {
+        if (!Storage.getPremiumStatus()) {
+            showPremiumModal();
+            return;
+        }
+
+        try {
+            const [medicamentos, citas, tareas, sintomas, contactos] = await Promise.all([
+                Storage.getMedicamentos(),
+                Storage.getCitas(),
+                Storage.getTareas(),
+                Storage.getSintomas(),
+                Storage.getContactos()
+            ]);
+            const signos = Storage.getSignosVitales ? (Storage.getSignosVitales() || []) : [];
+
+            // Escapa un valor para CSV (envuelve en comillas y escapa las internas)
+            const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+            const row = (...cols) => cols.map(esc).join(',');
+
+            const lines = [];
+
+            // ── Medicamentos ──
+            lines.push('MEDICAMENTOS');
+            lines.push(row('Nombre', 'Dosis', 'Frecuencia', 'Hora inicio', 'Recordatorio', 'Notas'));
+            (medicamentos || []).forEach(m =>
+                lines.push(row(m.nombre, m.dosis, m.frecuencia, m.hora_inicio || '', m.recordatorio ? 'Sí' : 'No', m.notas || ''))
+            );
+            lines.push('');
+
+            // ── Citas ──
+            lines.push('CITAS');
+            lines.push(row('Título', 'Tipo', 'Fecha', 'Hora', 'Lugar', 'Profesional', 'Notas'));
+            (citas || []).forEach(c =>
+                lines.push(row(c.titulo, c.tipo, c.fecha, c.hora || '', c.lugar || '', c.profesional || '', c.notas || ''))
+            );
+            lines.push('');
+
+            // ── Tareas ──
+            lines.push('TAREAS');
+            lines.push(row('Título', 'Categoría', 'Fecha', 'Hora', 'Frecuencia', 'Completada', 'Descripción'));
+            (tareas || []).forEach(t =>
+                lines.push(row(t.titulo, t.categoria || '', t.fecha, t.hora || '', t.frecuencia || '', t.completada ? 'Sí' : 'No', t.descripcion || ''))
+            );
+            lines.push('');
+
+            // ── Síntomas ──
+            lines.push('SÍNTOMAS');
+            lines.push(row('Tipo', 'Intensidad', 'Estado ánimo', 'Descripción', 'Fecha'));
+            (sintomas || []).forEach(s =>
+                lines.push(row(s.tipo, s.intensidad, s.estado_animo || '', s.descripcion || '', s.fecha || ''))
+            );
+            lines.push('');
+
+            // ── Signos vitales ──
+            if (signos.length) {
+                lines.push('SIGNOS VITALES');
+                lines.push(row('Tipo', 'Valor', 'Sistólica', 'Diastólica', 'Notas', 'Fecha'));
+                signos.forEach(s =>
+                    lines.push(row(s.tipo, s.valor || '', s.sistolica || '', s.diastolica || '', s.notas || '', s.fecha || ''))
+                );
+                lines.push('');
+            }
+
+            // ── Contactos ──
+            lines.push('CONTACTOS');
+            lines.push(row('Nombre', 'Categoría', 'Especialidad', 'Teléfono', 'Email', 'Dirección', 'Notas'));
+            (contactos || []).forEach(c =>
+                lines.push(row(c.nombre, c.categoria || '', c.especialidad || '', c.telefono || '', c.email || '', c.direccion || '', c.notas || ''))
+            );
+
+            // BOM (\uFEFF) para que Excel lo abra con tildes correctas
+            const csv = '\uFEFF' + lines.join('\r\n');
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `cuidadiario-datos-${new Date().toISOString().split('T')[0]}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            if (window.showToast) showToast('✅ Datos exportados como CSV', 'success');
+            else alert('✓ Datos exportados como CSV');
+        } catch (err) {
+            console.error('Error exportando CSV:', err);
+            if (window.showToast) showToast('Error al exportar CSV', 'error');
+        }
+    },
+
+    /**
      * Importar datos desde JSON
      */
     importarDatos(event) {
@@ -500,6 +594,7 @@ window.generarReporteCompleto = () => Reports.generarReporteCompleto();
 window.generarReporteMedicamentos = () => Reports.generarReporteMedicamentos();
 window.generarReporteMedico = () => Reports.generarReporteMedico();
 window.exportarDatos = () => Reports.exportarDatos();
+window.exportarCSV   = () => Reports.exportarCSV();
 window.importarDatos = (event) => Reports.importarDatos(event);
 
 window.Reports = Reports;

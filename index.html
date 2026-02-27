@@ -59,6 +59,7 @@
                 </ul>
             </nav>
             <div class="header-actions">
+                <button id="langToggleBtn" onclick="toggleLanguage()" style="background:none;border:1px solid rgba(255,255,255,0.3);color:inherit;padding:6px 12px;border-radius:8px;cursor:pointer;font-size:0.8rem;font-weight:600;letter-spacing:0.5px;transition:all 0.2s;" title="Cambiar idioma">EN</button>
                 <button class="btn-premium" id="btnPremium">
                     <span class="premium-icon"></span>
                     <span id="premiumText">Obtener Premium</span>
@@ -383,9 +384,14 @@
                         <h3>Gestión de Datos</h3>
                         <div class="data-actions">
                             <div class="data-action-card">
-                                <h4>📥 Exportar Datos</h4>
-                                <p>Descarga todos tus datos en formato JSON</p>
-                                <button class="btn-secondary" onclick="exportarDatos()">Exportar</button>
+                                <h4>📥 Exportar JSON</h4>
+                                <p>Descarga todos tus datos en formato JSON (backup completo)</p>
+                                <button class="btn-secondary" onclick="exportarDatos()">Exportar JSON</button>
+                            </div>
+                            <div class="data-action-card">
+                                <h4>📊 Exportar CSV</h4>
+                                <p>Exporta tus datos como planilla (compatible con Excel)</p>
+                                <button class="btn-secondary" onclick="exportarCSV()">Exportar CSV</button>
                             </div>
                             <div class="data-action-card">
                                 <h4>📤 Importar Datos</h4>
@@ -878,6 +884,27 @@
                         <label for="profilePasswordConfirm">Confirmar nueva contraseña</label>
                         <input type="password" id="profilePasswordConfirm" placeholder="Repetí la nueva contraseña">
                     </div>
+                    <div class="form-group">
+                        <label for="profileTimezone">🌍 Zona horaria</label>
+                        <select id="profileTimezone" style="width:100%;padding:10px 12px;border:1px solid var(--border-color,#e0e0e0);border-radius:8px;font-size:0.9rem;background:var(--bg-secondary,#f8f9fa);">
+                            <option value="America/Argentina/Buenos_Aires">🇦🇷 Argentina (UTC-3)</option>
+                            <option value="America/Montevideo">🇺🇾 Uruguay (UTC-3)</option>
+                            <option value="America/Sao_Paulo">🇧🇷 Brasil - São Paulo (UTC-3)</option>
+                            <option value="America/Santiago">🇨🇱 Chile (UTC-4/UTC-3)</option>
+                            <option value="America/Asuncion">🇵🇾 Paraguay (UTC-4/UTC-3)</option>
+                            <option value="America/La_Paz">🇧🇴 Bolivia (UTC-4)</option>
+                            <option value="America/Bogota">🇨🇴 Colombia (UTC-5)</option>
+                            <option value="America/Lima">🇵🇪 Perú (UTC-5)</option>
+                            <option value="America/Caracas">🇻🇪 Venezuela (UTC-4)</option>
+                            <option value="America/Mexico_City">🇲🇽 México Ciudad (UTC-6)</option>
+                            <option value="America/New_York">🇺🇸 USA Este (UTC-5)</option>
+                            <option value="America/Chicago">🇺🇸 USA Centro (UTC-6)</option>
+                            <option value="America/Los_Angeles">🇺🇸 USA Oeste (UTC-8)</option>
+                            <option value="Europe/Madrid">🇪🇸 España (UTC+1)</option>
+                            <option value="Europe/London">🇬🇧 Reino Unido (UTC+0)</option>
+                            <option value="UTC">🌐 UTC (Universal)</option>
+                        </select>
+                    </div>
                     <button type="submit" class="btn-primary" style="width:100%;margin-top:8px;" id="profileSaveBtn">Guardar cambios</button>
                 </form>
                 <div id="profilePremiumInfo" style="display:none;margin-top:20px;padding:14px 16px;background:rgba(76,175,80,0.1);border:1px solid rgba(76,175,80,0.3);border-radius:10px;">
@@ -897,6 +924,44 @@
                     <p style="font-size:0.8em;color:var(--text-secondary);margin-bottom:12px;line-height:1.5;">Instalá CuidaDiario como app para acceso rápido y notificaciones más confiables, incluso con el navegador cerrado.</p>
                     <button id="a2hsBtn" onclick="triggerA2HS()" class="btn-secondary" style="width:100%;font-size:0.85rem;">📲 Agregar a pantalla de inicio</button>
                 </div>            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Onboarding primer uso -->
+    <div class="modal" id="onboardingModal" style="z-index:10010;">
+        <div class="modal-content" style="max-width:420px;padding:0;overflow:hidden;">
+            <div style="height:4px;background:#e8eaf0;">
+                <div id="onbProgressBar" style="height:100%;width:25%;background:linear-gradient(135deg,#667eea,#764ba2);transition:width 0.35s ease;"></div>
+            </div>
+            <!-- Paso 1 -->
+            <div class="onb-step" id="onbStep1" style="padding:36px 28px 28px;text-align:center;">
+                <div style="font-size:3.5rem;margin-bottom:12px;">👋</div>
+                <h2 style="margin-bottom:10px;font-size:1.35rem;">¡Bienvenido/a a CuidaDiario!</h2>
+                <p style="color:var(--text-secondary);line-height:1.65;font-size:0.93rem;margin-bottom:24px;">La app pensada para organizar el cuidado de tus seres queridos.<br>Te mostramos las funciones principales en 3 pasos rápidos.</p>
+                <button onclick="onboardingNext()" class="btn-primary" style="width:100%;padding:13px;">Empezar →</button>
+                <button onclick="skipOnboarding()" style="margin-top:12px;background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:0.83rem;width:100%;">Saltar introducción</button>
+            </div>
+            <!-- Paso 2 -->
+            <div class="onb-step" id="onbStep2" style="display:none;padding:36px 28px 28px;text-align:center;">
+                <div style="font-size:3.5rem;margin-bottom:12px;">💊</div>
+                <h2 style="margin-bottom:10px;font-size:1.35rem;">Medicamentos y recordatorios</h2>
+                <p style="color:var(--text-secondary);line-height:1.65;font-size:0.93rem;margin-bottom:24px;">Registrá los medicamentos con su dosis y frecuencia. Activá el recordatorio y recibirás una notificación push automáticamente en tu celular a la hora exacta.</p>
+                <button onclick="onboardingNext()" class="btn-primary" style="width:100%;padding:13px;">Siguiente →</button>
+            </div>
+            <!-- Paso 3 -->
+            <div class="onb-step" id="onbStep3" style="display:none;padding:36px 28px 28px;text-align:center;">
+                <div style="font-size:3.5rem;margin-bottom:12px;">📅</div>
+                <h2 style="margin-bottom:10px;font-size:1.35rem;">Citas, tareas y más</h2>
+                <p style="color:var(--text-secondary);line-height:1.65;font-size:0.93rem;margin-bottom:24px;">Agendá citas médicas con aviso anticipado, registrá tareas de cuidado, síntomas y signos vitales. Todo en un solo lugar.</p>
+                <button onclick="onboardingNext()" class="btn-primary" style="width:100%;padding:13px;">Siguiente →</button>
+            </div>
+            <!-- Paso 4 -->
+            <div class="onb-step" id="onbStep4" style="display:none;padding:36px 28px 28px;text-align:center;">
+                <div style="font-size:3.5rem;margin-bottom:12px;">🌟</div>
+                <h2 style="margin-bottom:10px;font-size:1.35rem;">¡Todo listo!</h2>
+                <p style="color:var(--text-secondary);line-height:1.65;font-size:0.93rem;margin-bottom:24px;">Ya podés empezar a usar CuidaDiario. Si tenés dudas o sugerencias, escribinos a <a href="mailto:edensoftwarework@gmail.com" style="color:#667eea;">edensoftwarework@gmail.com</a></p>
+                <button onclick="skipOnboarding()" class="btn-primary" style="width:100%;padding:13px;background:linear-gradient(135deg,#43c6ac,#191654);">¡Comenzar ahora!</button>
+            </div>
         </div>
     </div>
 
@@ -942,6 +1007,7 @@
     <script src="https://www.paypal.com/sdk/js?client-id=Ab76zjr_5ed2oQL7SdkeXZPLcy-0D867VvyvbRYhx3cbo7hy2UTz42o8AK0bqEl0LaEfHrIlZQkiBij5&vault=true&intent=subscription"></script>
 
     <!-- Scripts -->
+    <script src="js/i18n.js"></script>
     <script src="js/api.js"></script>
     <script src="js/storage.js"></script>
     <script src="js/notifications.js"></script>

@@ -40,6 +40,12 @@ async function initApp() {
 
     // Registrar Service Worker y configurar Push Notifications (PWA)
     initPWA();
+
+    // Aplicar traducciones según idioma guardado
+    if (window.I18n) I18n.apply();
+
+    // Mostrar onboarding solo la primera vez
+    setTimeout(showOnboarding, 800);
 }
 
 // ========== NAVEGACIÓN ==========
@@ -1707,6 +1713,47 @@ function cerrarA2HSBanner() {
 }
 window.cerrarA2HSBanner = cerrarA2HSBanner;
 
+// ========== ONBOARDING (PRIMER USO) ==========
+const ONBOARDING_KEY = 'cuidadiario_onboarding_done';
+const ONBOARDING_STEPS = 4;
+let _onbStep = 1;
+
+function showOnboarding() {
+    if (localStorage.getItem(ONBOARDING_KEY)) return;
+    const modal = document.getElementById('onboardingModal');
+    if (!modal) return;
+    _onbStep = 1;
+    // Reset: show step 1, hide others
+    for (let i = 1; i <= ONBOARDING_STEPS; i++) {
+        const el = document.getElementById(`onbStep${i}`);
+        if (el) el.style.display = i === 1 ? 'block' : 'none';
+    }
+    const bar = document.getElementById('onbProgressBar');
+    if (bar) bar.style.width = `${(1 / ONBOARDING_STEPS) * 100}%`;
+    modal.classList.add('active');
+}
+
+function onboardingNext() {
+    if (_onbStep >= ONBOARDING_STEPS) { skipOnboarding(); return; }
+    const cur = document.getElementById(`onbStep${_onbStep}`);
+    if (cur) cur.style.display = 'none';
+    _onbStep++;
+    const next = document.getElementById(`onbStep${_onbStep}`);
+    if (next) next.style.display = 'block';
+    const bar = document.getElementById('onbProgressBar');
+    if (bar) bar.style.width = `${(_onbStep / ONBOARDING_STEPS) * 100}%`;
+}
+
+function skipOnboarding() {
+    const modal = document.getElementById('onboardingModal');
+    if (modal) modal.classList.remove('active');
+    localStorage.setItem(ONBOARDING_KEY, '1');
+}
+
+window.showOnboarding  = showOnboarding;
+window.onboardingNext  = onboardingNext;
+window.skipOnboarding  = skipOnboarding;
+
 function closeWelcomeBanner() {
     document.getElementById('welcomeBanner').style.display = 'none';
     Storage.set(Storage.KEYS.WELCOME_SHOWN, true);
@@ -2119,6 +2166,9 @@ function openProfileModal() {
     document.getElementById('profileEmail').value = user.email || '';
     document.getElementById('profilePassword').value = '';
     document.getElementById('profilePasswordConfirm').value = '';
+    // Cargar timezone guardada
+    const tzSelect = document.getElementById('profileTimezone');
+    if (tzSelect) tzSelect.value = user.timezone || 'America/Argentina/Buenos_Aires';
     // Mostrar info premium si aplica
     const premiumInfo = document.getElementById('profilePremiumInfo');
     if (premiumInfo) premiumInfo.style.display = Storage.getPremiumStatus() ? 'block' : 'none';
@@ -2155,6 +2205,8 @@ async function saveProfile(e) {
     try {
         const payload = { nombre, email };
         if (password) payload.password = password;
+        const tzSelect = document.getElementById('profileTimezone');
+        if (tzSelect) payload.timezone = tzSelect.value;
         const data = await API.updateProfile(payload);
         // Actualizar localStorage con nuevos datos
         const updated = data.usuario || { nombre, email, premium: Storage.getPremiumStatus() };
