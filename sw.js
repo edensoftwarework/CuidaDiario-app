@@ -175,12 +175,49 @@ async function networkFirstAsset(request) {
 }
 
 /**
+ * Borra del caché de API todas las entradas que correspondan al mismo recurso
+ * que acaba de ser mutado (POST/PUT/DELETE exitoso), forzando un fetch fresco
+ * en el próximo GET de esa sección.
+ */
+async function invalidateApiCache(url) {
+    // Mapeo: patrón de URL mutada → patrón a limpiar del caché
+    const RESOURCE_GROUPS = [
+        /\/api\/medicamentos/,
+        /\/api\/citas/,
+        /\/api\/tareas/,
+        /\/api\/sintomas/,
+        /\/api\/contactos/,
+        /\/api\/signos-vitales/,
+        /\/api\/historial-medicamentos/,
+        /\/api\/pacientes/,
+        /\/api\/me/,
+        /\/api\/share/,
+    ];
+    const matched = RESOURCE_GROUPS.find(p => p.test(url));
+    if (!matched) return;
+    try {
+        const cache = await caches.open(API_CACHE_NAME);
+        const keys = await cache.keys();
+        await Promise.all(
+            keys.filter(req => matched.test(req.url)).map(req => cache.delete(req))
+        );
+    } catch { /* OK */ }
+}
+
+/**
  * Para escrituras (POST/PUT/DELETE): intentar red.
+ * Si la escritura tiene éxito, invalidar el caché GET del recurso afectado
+ * para que el próximo loadXxx() obtenga datos frescos del servidor.
  * Si falla por offline, encolar en IndexedDB para reintento cuando vuelva la conexión.
  */
 async function networkWithOfflineQueue(request) {
     try {
-        return await fetch(request.clone());
+        const response = await fetch(request.clone());
+        // Invalidar caché GET del recurso afectado para que el próximo load sea fresco
+        if (response.ok) {
+            invalidateApiCache(request.url).catch(() => {});
+        }
+        return response;
     } catch (err) {
         // Encolar la solicitud para sync posterior
         try {

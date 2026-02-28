@@ -521,6 +521,7 @@ async function editMedicamento(id) {
 async function deleteMedicamento(id) {
     if (confirm('¿Estás seguro de que quieres eliminar este medicamento?')) {
         await Storage.deleteMedicamento(id);
+        showToast('🗑️ Medicamento eliminado', 'success');
         await loadMedicamentos();
         await loadDashboard();
     }
@@ -551,6 +552,7 @@ async function saveMedicamento(event) {
     }
     
     closeMedicamentoModal();
+    showToast(id ? '✓ Medicamento actualizado' : '✓ Medicamento guardado', 'success');
     await loadMedicamentos();
     await loadDashboard();
 }
@@ -830,6 +832,7 @@ async function editCita(id) {
 async function deleteCita(id) {
     if (confirm('¿Estás seguro de que quieres eliminar esta cita?')) {
         await Storage.deleteCita(id);
+        showToast('🗑️ Cita eliminada', 'success');
         await loadCitas();
         await loadDashboard();
     }
@@ -864,6 +867,7 @@ async function saveCita(event) {
     }
     
     closeCitaModal();
+    showToast(id ? '✓ Cita actualizada' : '✓ Cita guardada', 'success');
     await loadCitas();
     await loadDashboard();
 }
@@ -1480,6 +1484,7 @@ async function editTarea(id) {
 async function deleteTarea(id) {
     if (confirm('¿Estás seguro de que quieres eliminar esta tarea?')) {
         await Storage.deleteTarea(id);
+        showToast('🗑️ Tarea eliminada', 'success');
         await loadTareas();
         await loadDashboard();
     }
@@ -1534,6 +1539,7 @@ async function saveTarea(event) {
     }
     
     closeTareaModal();
+    showToast(id ? '✓ Tarea actualizada' : '✓ Tarea guardada', 'success');
     await loadTareas();
     await loadDashboard();
 }
