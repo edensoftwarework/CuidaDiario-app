@@ -465,6 +465,23 @@ const API = {
             body: JSON.stringify({ endpoint })
         });
         return this.handleResponse(response);
+    },
+
+    // Envía una push de prueba al usuario para verificar que el sistema funciona end-to-end
+    async testPush() {
+        const response = await fetch(`${this.BASE_URL}/api/push/test`, {
+            method: 'POST',
+            headers: this.getHeaders()
+        });
+        return this.handleResponse(response);
+    },
+
+    // Verifica cuántas suscripciones push tiene el usuario en el backend
+    async getPushStatus() {
+        const response = await fetch(`${this.BASE_URL}/api/push/status`, {
+            headers: this.getHeaders()
+        });
+        return this.handleResponse(response);
     }
 };
 

@@ -934,6 +934,10 @@
                 <p style="color:var(--text-secondary);font-size:0.9rem;line-height:1.65;margin-bottom:20px;">Recibí recordatorios automáticos de medicamentos, citas y tareas, incluso con la app cerrada. Se activan solos al iniciar sesión.</p>
                 <div id="pushNotifSection">
                     <button id="pushToggleBtn" onclick="togglePushNotifications()" class="btn-secondary" style="width:100%;padding:13px;font-size:0.9rem;">🔔 Activar notificaciones push</button>
+                    <button id="testPushBtn" onclick="sendTestPush()" class="btn-secondary" style="width:100%;padding:11px;font-size:0.85rem;margin-top:10px;display:none;">🧪 Enviar notificación de prueba</button>
+                </div>
+                <div id="iosNoPushWarning" style="display:none;margin-top:14px;padding:14px;background:#FFF3E0;border-radius:10px;font-size:0.83rem;color:#E65100;line-height:1.6;border-left:4px solid #FF9800;">
+                    📱 <strong>iPhone/iPad:</strong> Para recibir notificaciones en iOS, necesitás <strong>instalar la app primero</strong> (tocá ↑ Compartir → "Añadir a pantalla de inicio"). Las notificaciones push en iOS solo funcionan desde la app instalada en pantalla de inicio.
                 </div>
                 <p style="margin-top:14px;font-size:0.8rem;color:var(--text-secondary);line-height:1.55;">💡 Si bloqueaste las notificaciones en el navegador, tenés que habilitarlas manualmente en Configuración del navegador → Privacidad → Notificaciones.</p>
             </div>

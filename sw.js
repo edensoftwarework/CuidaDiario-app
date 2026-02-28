@@ -8,7 +8,7 @@
  *  - Notification click (abre la app o enfoca la pestaña)
  */
 
-const CACHE_NAME = 'cuidadiario-v3';
+const CACHE_NAME = 'cuidadiario-v4';
 const ASSETS = [
     '/',
     '/index.html',
@@ -131,19 +131,25 @@ self.addEventListener('notificationclick', (event) => {
 });
 
 // ===== PUSH SUBSCRIPTION CHANGE: re-suscribir automáticamente =====
+// Se dispara cuando el browser rota la clave de suscripción (ej: actualización de Chrome)
+// CRÍTICO: usar event.oldSubscription.options para preservar la applicationServerKey (VAPID)
 self.addEventListener('pushsubscriptionchange', (event) => {
     event.waitUntil(
-        self.registration.pushManager.subscribe({ userVisibleOnly: true })
-            .then(subscription => {
-                // Notificar a todos los clientes para que actualicen la suscripción en el servidor
-                return self.clients.matchAll().then(clients => {
-                    clients.forEach(client => {
-                        client.postMessage({
-                            type: 'PUSH_SUBSCRIPTION_CHANGED',
-                            subscription: subscription.toJSON()
-                        });
-                    });
-                });
-            })
+        (async () => {
+            try {
+                // Reutilizar las opciones originales (incluye applicationServerKey con VAPID)
+                const options = event.oldSubscription?.options || { userVisibleOnly: true };
+                const subscription = await self.registration.pushManager.subscribe(options);
+                // Notificar a todos los tabs abiertos para que guarden la nueva suscripción en el backend
+                const clientList = await self.clients.matchAll({ includeUncontrolled: true });
+                clientList.forEach(client => client.postMessage({
+                    type: 'PUSH_SUBSCRIPTION_CHANGED',
+                    subscription: subscription.toJSON()
+                }));
+                console.log('[SW] Suscripción push renovada automáticamente ✅');
+            } catch (err) {
+                console.warn('[SW] Error renovando suscripción push:', err.message);
+            }
+        })()
     );
 });

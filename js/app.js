@@ -41,6 +41,10 @@ async function initApp() {
     // Registrar Service Worker y configurar Push Notifications (PWA)
     initPWA();
 
+    // Re-sincronizar suscripción push con backend en cada login
+    // Garantiza que si la suscripción nunca se guardó (fallo de red, token expirado, etc.) quede registrada
+    resyncPushSubscription();
+
     // Mostrar banner de notificaciones push si el usuario nunca lo activó
     // (solo si está autenticado y el navegador soporta push)
     if (API.isAuthenticated() && 'serviceWorker' in navigator && 'PushManager' in window) {
@@ -2252,6 +2256,50 @@ window.deleteHistorialEntry = deleteHistorialEntry;
 
 // ========== PUSH NOTIFICATIONS (PWA) ==========
 
+// Re-sincronizar suscripción push con el backend en cada inicio de sesión.
+// Si la primera suscripción falló (sin red, token expirado, etc.), se reintenta aquí.
+async function resyncPushSubscription() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    if (!API.isAuthenticated()) return;
+    if (Notification.permission !== 'granted') return;
+    try {
+        const reg = await navigator.serviceWorker.ready;
+        const existing = await reg.pushManager.getSubscription();
+        if (existing) {
+            // Siempre re-guardar: el backend hace ON CONFLICT UPDATE, no hay duplicados
+            API.savePushSubscription(existing.toJSON())
+                .then(() => console.log('[Push] Suscripción re-sincronizada con backend ✅'))
+                .catch(e => console.warn('[Push] Resync fallido (se reintenta en próximo login):', e.message));
+        } else {
+            // Permiso concedido pero sin suscripción activa → recrear automáticamente
+            await _autoSubscribePush(reg);
+        }
+    } catch (e) {
+        console.warn('[Push] Error en resync:', e.message);
+    }
+}
+
+// Enviar una notificación push de prueba para verificar que todo funciona
+async function sendTestPush() {
+    const btn = document.getElementById('testPushBtn');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Enviando...'; }
+    try {
+        const result = await API.testPush();
+        showToast(`✅ Enviada a ${result.devices} dispositivo(s) — esperá unos segundos`, 'success');
+    } catch (err) {
+        const msg = (err.message || '').toLowerCase();
+        if (msg.includes('suscripción') || msg.includes('404') || msg.includes('no hay')) {
+            showToast('⚠️ Este dispositivo no está suscrito. Activá las notificaciones primero.', 'warning');
+        } else if (msg.includes('vapid') || msg.includes('503') || msg.includes('configurad')) {
+            showToast('❌ Servidor sin VAPID configurado — seguí los pasos en setup-vapid.js', 'error');
+        } else {
+            showToast('Error al enviar prueba: ' + (err.message || err), 'error');
+        }
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '🧪 Enviar notificación de prueba'; }
+    }
+}
+
 // Convierte la clave VAPID base64url a Uint8Array (requerido por pushManager.subscribe)
 function urlBase64ToUint8Array(base64String) {
     const padding = '='.repeat((4 - base64String.length % 4) % 4);
@@ -2270,6 +2318,18 @@ async function updatePushToggleUI() {
     const section = document.getElementById('pushNotifSection');
     if (!btn || !section) return;
 
+    // iOS sin instalación: Web Push no funciona en Safari sin instalar la PWA (límite de Apple)
+    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    const isStandalone = window.navigator.standalone === true ||
+                         window.matchMedia('(display-mode: standalone)').matches;
+    const iosWarning = document.getElementById('iosNoPushWarning');
+    if (isIOS && !isStandalone) {
+        if (iosWarning) iosWarning.style.display = 'block';
+        section.style.display = 'none';
+        return;
+    }
+    if (iosWarning) iosWarning.style.display = 'none';
+
     // Si el navegador no soporta push, ocultar la sección
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
         section.style.display = 'none';
@@ -2280,21 +2340,25 @@ async function updatePushToggleUI() {
         const reg = await navigator.serviceWorker.ready;
         const subscription = await reg.pushManager.getSubscription();
         const permission = Notification.permission;
+        const testBtn = document.getElementById('testPushBtn');
 
         if (subscription && permission === 'granted') {
             btn.textContent = '🔔 Notificaciones activadas — Desactivar';
             btn.classList.remove('btn-secondary');
             btn.classList.add('btn-push-active');
+            if (testBtn) testBtn.style.display = 'block';
         } else if (permission === 'denied') {
             btn.textContent = '🔕 Permiso denegado en el navegador';
             btn.disabled = true;
             btn.style.opacity = '0.6';
+            if (testBtn) testBtn.style.display = 'none';
         } else {
             btn.textContent = '🔔 Activar notificaciones push';
             btn.classList.add('btn-secondary');
             btn.classList.remove('btn-push-active');
             btn.disabled = false;
             btn.style.opacity = '';
+            if (testBtn) testBtn.style.display = 'none';
         }
     } catch (err) {
         console.warn('[Push] Error verificando estado:', err);
@@ -2533,6 +2597,8 @@ window.cerrarPushBanner = cerrarPushBanner;
 window.updatePushToggleUI = updatePushToggleUI;
 window.triggerA2HS = triggerA2HS;
 window.updateA2HSButton = updateA2HSButton;
+window.sendTestPush = sendTestPush;
+window.resyncPushSubscription = resyncPushSubscription;
 
 // ========== MENÚ DE CONFIGURACIÓN ==========
 
