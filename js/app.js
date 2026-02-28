@@ -66,6 +66,43 @@ async function initApp() {
     setTimeout(showOnboarding, 800);
 }
 
+// ========== NAVEGADOR DE SECCIONES (flechas) ==========
+const SECTIONS_ORDER  = ['dashboard','medicamentos','citas','sintomas','tareas','contactos','reportes'];
+const SECTIONS_LABELS = {
+    dashboard:   'Inicio',
+    medicamentos:'Medicamentos',
+    citas:       'Citas',
+    sintomas:    'Síntomas',
+    tareas:      'Tareas',
+    contactos:   'Contactos',
+    reportes:    'Reportes'
+};
+
+function updateSectionNav(sectionId) {
+    const label   = document.getElementById('sectionNavLabel');
+    const prevBtn = document.getElementById('prevSectionBtn');
+    const nextBtn = document.getElementById('nextSectionBtn');
+    if (!label || !prevBtn || !nextBtn) return;
+    const idx = SECTIONS_ORDER.indexOf(sectionId);
+    label.textContent  = SECTIONS_LABELS[sectionId] || sectionId;
+    prevBtn.disabled   = idx <= 0;
+    nextBtn.disabled   = idx >= SECTIONS_ORDER.length - 1;
+}
+
+function navigatePrevSection() {
+    const active = document.querySelector('.section.active');
+    if (!active) return;
+    const idx = SECTIONS_ORDER.indexOf(active.id);
+    if (idx > 0) navigateToSection(SECTIONS_ORDER[idx - 1]);
+}
+
+function navigateNextSection() {
+    const active = document.querySelector('.section.active');
+    if (!active) return;
+    const idx = SECTIONS_ORDER.indexOf(active.id);
+    if (idx < SECTIONS_ORDER.length - 1) navigateToSection(SECTIONS_ORDER[idx + 1]);
+}
+
 // ========== NAVEGACIÓN ==========
 function setupNavigation() {
     const navLinks = document.querySelectorAll('.nav-link');
@@ -142,6 +179,7 @@ async function navigateToSection(sectionId) {
             loadReportes();
             break;
     }
+    updateSectionNav(sectionId);
 }
 
 // ========== DASHBOARD ==========
@@ -2676,7 +2714,9 @@ function selectLanguage(lang) {
     showToast(lang === 'es' ? '🇦🇷 Idioma: Español' : '🇬🇧 Language: English', 'success');
 }
 
-window.toggleSettingsMenu = toggleSettingsMenu;
-window.closeSettingsMenu  = closeSettingsMenu;
-window.openSettingsModal  = openSettingsModal;
-window.selectLanguage     = selectLanguage;
+window.toggleSettingsMenu   = toggleSettingsMenu;
+window.closeSettingsMenu    = closeSettingsMenu;
+window.openSettingsModal    = openSettingsModal;
+window.selectLanguage       = selectLanguage;
+window.navigatePrevSection  = navigatePrevSection;
+window.navigateNextSection  = navigateNextSection;

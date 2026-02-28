@@ -8,7 +8,7 @@
  *  - Notification click (abre la app o enfoca la pestaña)
  */
 
-const CACHE_NAME = 'cuidadiario-v4';
+const CACHE_NAME = 'cuidadiario-v5';
 const ASSETS = [
     '/',
     '/index.html',
@@ -20,7 +20,8 @@ const ASSETS = [
     '/js/reports.js',
     '/js/app.js',
     '/manifest.json',
-    '/icon.svg'
+    '/icon.svg',
+    '/badge.svg'
 ];
 
 // ===== INSTALL: pre-cachear assets =====
@@ -89,7 +90,7 @@ self.addEventListener('push', (event) => {
     const options = {
         body: payload.body,
         icon: payload.icon || '/icon.svg',
-        badge: '/icon.svg',
+        badge: '/badge.svg',  // monocromo blanco — Android lo muestra bien en barra de notif
         vibrate: [200, 100, 200, 100, 300, 100, 300],
         tag: payload.tag || 'cuidadiario-notif',
         renotify: true,

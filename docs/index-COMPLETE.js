@@ -949,6 +949,16 @@ app.post('/api/push/test', authMiddleware, async (req, res) => {
 });
 
 // Helper: envía una notificación push a todos los dispositivos de un usuario
+// urgency: 'high' → le indica a FCM/Mozilla Push que entregue INMEDIATAMENTE,
+//   bypaseando el Doze Mode de Android (batería optimizada, pantalla apagada).
+//   Sin esto, Android puede retener la notificación hasta que el usuario desbloquee.
+// TTL: 3600 → si el dispositivo está sin conexión, el servidor push reintenta
+//   durante 1 hora. Pasada esa hora, la descarta (el recordatorio ya no tiene sentido).
+const PUSH_OPTIONS = {
+    urgency: 'high',   // ← CRÍTICO para Android con pantalla apagada
+    TTL: 3600          // 1 hora de reintento si el dispositivo está offline
+};
+
 async function sendPushToUser(userId, payload) {
     if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return;
     try {
@@ -958,7 +968,7 @@ async function sendPushToUser(userId, payload) {
         );
         const promises = subs.rows.map(sub => {
             const subscription = { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } };
-            return webPush.sendNotification(subscription, JSON.stringify(payload))
+            return webPush.sendNotification(subscription, JSON.stringify(payload), PUSH_OPTIONS)
                 .catch(async err => {
                     // Endpoint caducado → eliminar automáticamente
                     if (err.statusCode === 410 || err.statusCode === 404) {
@@ -973,7 +983,46 @@ async function sendPushToUser(userId, payload) {
     }
 }
 
-// Chequeo periódico de recordatorios — corre cada 10 minutos en el servidor
+// Estado del cron (para endpoint de debug)
+let _cronLastRun = null;
+let _cronRunCount = 0;
+let _cronStartedAt = null;
+
+// GET /health — keep-alive y health check (Railway, UptimeRobot, etc.)
+app.get('/health', (req, res) => {
+    res.json({ status: 'ok', uptime: process.uptime(), time: new Date().toISOString() });
+});
+
+// GET /api/push/debug — diagnóstico público del sistema de push (no requiere auth)
+// Permite verificar desde el navegador si el cron está corriendo y cuántas suscripciones hay
+app.get('/api/push/debug', async (req, res) => {
+    try {
+        const subsCount = await pool.query('SELECT COUNT(*) AS c FROM push_subscriptions');
+        const medsCount = await pool.query('SELECT COUNT(*) AS c FROM medicamentos WHERE recordatorio = true');
+        const citasCount = await pool.query('SELECT COUNT(*) AS c FROM citas WHERE recordatorio IS NOT NULL AND recordatorio <> \'0\'');
+        const tareasCount = await pool.query('SELECT COUNT(*) AS c FROM tareas WHERE recordatorio = true AND completada = false');
+        res.json({
+            vapidConfigured: !!(VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY),
+            cronRunning: _cronStartedAt !== null,
+            cronStartedAt: _cronStartedAt,
+            cronLastRun: _cronLastRun,
+            cronRunCount: _cronRunCount,
+            subscriptions: parseInt(subsCount.rows[0].c),
+            medicamentosConRecordatorio: parseInt(medsCount.rows[0].c),
+            citasConRecordatorio: parseInt(citasCount.rows[0].c),
+            tareasConRecordatorio: parseInt(tareasCount.rows[0].c),
+            serverTime: new Date().toISOString(),
+            timezoneAR: new Intl.DateTimeFormat('sv-SE', {
+                timeZone: 'America/Argentina/Buenos_Aires',
+                hour: '2-digit', minute: '2-digit', second: '2-digit'
+            }).format(new Date())
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message, vapidConfigured: !!(VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) });
+    }
+});
+
+// Chequeo periódico de recordatorios — corre cada 8 minutos en el servidor
 function startPushReminders() {
     if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
         console.log('ℹ️  Push reminders desactivados (VAPID keys no configuradas)');
@@ -1077,8 +1126,10 @@ function startPushReminders() {
                 const horaMatch = horarios.find(h => {
                     const [hh, mm] = h.split(':').map(Number);
                     const medMin = hh * 60 + mm;
-                    // Ventana de 15 min (el cron corre cada 8 min → siempre hay overlap)
-                    return medMin >= tzMin && medMin < tzMin + 15;
+                    // Ventana: hasta 8 min atrás + 15 min adelante.
+                    // Cubre reinicios del servidor (si arrancó 5 min tarde, igual atrapa el horario)
+                    // La deduplicación (push_sent) garantiza que no se envíe dos veces.
+                    return medMin >= tzMin - 8 && medMin < tzMin + 15;
                 });
                 if (!horaMatch) continue;
                 const tag = `med-${med.usuario_id}-${med.nombre}-${horaMatch}-${tzNow.dateStr}`;
@@ -1091,7 +1142,10 @@ function startPushReminders() {
                 await markAsSent(tag);
             }
 
-            // ── 2. Citas: recordatorio vence en los próximos 15 min (por timezone del usuario) ──
+            // ── 2. Citas: recordatorio vence en la ventana actual (±8/+15 min por timezone) ──
+            // Usamos c.fecha + c.hora::time (suma DATE + TIME en PostgreSQL = TIMESTAMP WITHOUT TZ)
+            // en vez de concatenación de strings para evitar errores de formato con tipos nativos.
+            // Ventana: -8 min (cubre reinicios del servidor) + 15 min adelante.
             const citas = await pool.query(`
                 SELECT c.usuario_id, c.titulo, c.fecha, c.hora, c.recordatorio, c.lugar
                 FROM citas c
@@ -1100,12 +1154,11 @@ function startPushReminders() {
                 WHERE c.recordatorio IS NOT NULL
                   AND c.recordatorio <> '0'
                   AND c.hora IS NOT NULL
-                  AND c.hora <> ''
-                  AND (c.fecha || ' ' || c.hora)::timestamp
+                  AND (c.fecha::date + c.hora::time)
                       - (CAST(c.recordatorio AS integer) * INTERVAL '1 minute')
-                      BETWEEN (NOW() AT TIME ZONE COALESCE(u.timezone,'America/Argentina/Buenos_Aires'))::timestamp
-                              - INTERVAL '2 minutes'
-                          AND (NOW() AT TIME ZONE COALESCE(u.timezone,'America/Argentina/Buenos_Aires'))::timestamp
+                      BETWEEN (NOW() AT TIME ZONE COALESCE(u.timezone,'America/Argentina/Buenos_Aires'))
+                              - INTERVAL '8 minutes'
+                          AND (NOW() AT TIME ZONE COALESCE(u.timezone,'America/Argentina/Buenos_Aires'))
                               + INTERVAL '15 minutes'
             `);
             for (const cita of citas.rows) {
@@ -1124,7 +1177,9 @@ function startPushReminders() {
                 await markAsSent(tag);
             }
 
-            // ── 3. Tareas con hora específica (±15 min, en timezone del usuario) ──
+            // ── 3. Tareas con hora específica (ventana -8/+15 min, en timezone del usuario) ──
+            // Compara fecha+hora completa como TIMESTAMP para consistencia con citas.
+            // La ventana -8 min cubre reinicios del servidor igual que medicamentos y citas.
             const tareasConHora = await pool.query(`
                 SELECT t.usuario_id, t.titulo, t.hora, t.fecha
                 FROM tareas t
@@ -1132,12 +1187,11 @@ function startPushReminders() {
                 INNER JOIN usuarios u ON u.id = t.usuario_id
                 WHERE t.completada = false
                   AND t.recordatorio = true
-                  AND t.hora IS NOT NULL AND t.hora <> ''
-                  AND t.fecha = (NOW() AT TIME ZONE COALESCE(u.timezone,'America/Argentina/Buenos_Aires'))::date::text
-                  AND t.hora::time
-                      BETWEEN (NOW() AT TIME ZONE COALESCE(u.timezone,'America/Argentina/Buenos_Aires'))::time
-                              - INTERVAL '2 minutes'
-                          AND (NOW() AT TIME ZONE COALESCE(u.timezone,'America/Argentina/Buenos_Aires'))::time
+                  AND t.hora IS NOT NULL
+                  AND (t.fecha::date + t.hora::time)
+                      BETWEEN (NOW() AT TIME ZONE COALESCE(u.timezone,'America/Argentina/Buenos_Aires'))
+                              - INTERVAL '8 minutes'
+                          AND (NOW() AT TIME ZONE COALESCE(u.timezone,'America/Argentina/Buenos_Aires'))
                               + INTERVAL '15 minutes'
             `);
             for (const tarea of tareasConHora.rows) {
@@ -1183,14 +1237,17 @@ function startPushReminders() {
             }
 
             const log = nowInTZ('America/Argentina/Buenos_Aires');
-            console.log(`[Push Reminders] Chequeo OK — ${String(log.hours).padStart(2,'0')}:${String(log.minutes).padStart(2,'0')} AR`);
+            _cronLastRun = new Date().toISOString();
+            _cronRunCount++;
+            console.log(`[Push Reminders] Chequeo OK — ${String(log.hours).padStart(2,'0')}:${String(log.minutes).padStart(2,'0')} AR — #${_cronRunCount}`);
         } catch (err) {
             console.error('[Push Reminders] Error:', err.message);
         }
     }
 
     checkAndSendReminders();
-    setInterval(checkAndSendReminders, 8 * 60 * 1000); // cada 8 minutos — ventana de 15 min garantiza cobertura total
+    _cronStartedAt = new Date().toISOString();
+    setInterval(checkAndSendReminders, 8 * 60 * 1000); // cada 8 minutos — ventana ±8+15 min garantiza cobertura total
     console.log('✅ Push reminders iniciados (chequeo cada 8 minutos)');
 }
 
@@ -1426,5 +1483,20 @@ app.listen(PORT, async () => {
     console.log(`✅ Servidor escuchando en puerto ${PORT}`);
     console.log(`📍 http://localhost:${PORT}`);
     await runMigrations();
-    startPushReminders(); // ← NUEVO: arranca el chequeo periódico de push
+    startPushReminders(); // ← Arranca el chequeo periódico de push
+
+    // Keep-alive: evita que Railway duerma el servidor en planes gratuitos.
+    // Se hace un GET a /health propio cada 4 minutos.
+    const BACKEND_URL = process.env.RAILWAY_STATIC_URL
+        ? `https://${process.env.RAILWAY_STATIC_URL}`
+        : (process.env.BACKEND_URL || null);
+    if (BACKEND_URL) {
+        setInterval(() => {
+            https.get(`${BACKEND_URL}/health`, (res) => {
+                // Solo para mantener vivo el proceso, no necesitamos la respuesta
+                res.resume();
+            }).on('error', () => { /* silencioso — el servidor sigue corriendo */ });
+        }, 4 * 60 * 1000); // cada 4 minutos
+        console.log(`🏓 Keep-alive activado → ${BACKEND_URL}/health`);
+    }
 });
