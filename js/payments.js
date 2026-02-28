@@ -95,6 +95,9 @@ const Payments = {
                 return;
             }
 
+            // Marcar que el usuario fue a pagar (para verificar al volver a la app)
+            localStorage.setItem('cuidadiario_mp_pending', '1');
+
             // Redirigir al checkout de MercadoPago
             window.location.href = data.init_point;
 

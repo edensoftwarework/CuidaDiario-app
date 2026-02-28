@@ -67,6 +67,48 @@ async function initApp() {
 
     // Mostrar onboarding solo la primera vez
     setTimeout(showOnboarding, 800);
+
+    // Detectar retorno desde MercadoPago (vía flag o query param)
+    checkMercadoPagoReturn();
+}
+
+// Detecta si el usuario acaba de volver de pagar en MercadoPago y activa premium si corresponde
+async function checkMercadoPagoReturn() {
+    const urlParams  = new URLSearchParams(window.location.search);
+    const mpPending  = localStorage.getItem('cuidadiario_mp_pending');
+
+    if (!mpPending) return; // No venía de pagar
+
+    localStorage.removeItem('cuidadiario_mp_pending');
+    // Limpiar query params de la URL sin recargar
+    window.history.replaceState({}, '', window.location.pathname);
+
+    if (!API.isAuthenticated()) return;
+
+    showToast('⏳ Verificando tu suscripción con MercadoPago...', 'info', 4000);
+
+    // Reintentar hasta 10 veces (25 segundos) para dar tiempo al webhook
+    let attempts = 0;
+    async function tryVerify() {
+        attempts++;
+        try {
+            const token = API.getToken();
+            const res   = await fetch(`${API.BASE_URL}/api/verify-subscription`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const data = await res.json();
+            if (data.premium) {
+                showToast('🎉 ¡Premium activado! Bienvenido.', 'success', 6000);
+                await API.refreshUser();
+                updatePremiumStatus();
+                await loadPacienteSelector();
+                await loadDashboard();
+                return;
+            }
+        } catch (e) { /* continuar reintentando */ }
+        if (attempts < 10) setTimeout(tryVerify, 2500);
+    }
+    setTimeout(tryVerify, 1500); // pequeño delay inicial
 }
 
 // ========== NAVEGADOR DE SECCIONES (flechas) ==========

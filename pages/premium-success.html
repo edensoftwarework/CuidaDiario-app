@@ -198,9 +198,13 @@
 
     <script>
         const API_BASE = 'https://cuidadiario-backend-production.up.railway.app';
-        const MAX_ATTEMPTS = 15; // 30 segundos (cada 2s)
+        const MAX_ATTEMPTS = 12; // 12 × 2.5s = 30 segundos
         let attempts = 0;
-        let pollInterval = null;
+        let pollTimer = null;
+
+        // Preapproval_id que MercadoPago agrega al back_url: ?preapproval_id=XXX
+        const urlParams     = new URLSearchParams(window.location.search);
+        const preapprovalId = urlParams.get('preapproval_id') || urlParams.get('preapprovalId') || null;
 
         function show(stateId) {
             ['stateLoading', 'stateSuccess', 'statePending', 'stateNoAuth'].forEach(id => {
@@ -208,62 +212,65 @@
             });
         }
 
-        function animateProgress() {
-            // Animar la barra de progreso durante los 30 segundos de polling
-            const bar = document.getElementById('progressBar');
-            let pct = 0;
-            const step = 100 / MAX_ATTEMPTS;
-            pollInterval = setInterval(async () => {
-                attempts++;
-                pct = Math.min(pct + step, 95);
-                bar.style.width = pct + '%';
-                await checkPremium();
-            }, 2000);
+        function setProgress(pct) {
+            document.getElementById('progressBar').style.width = Math.min(pct, 100) + '%';
         }
 
-        async function checkPremium() {
+        async function verifyAndActivate() {
+            const token = localStorage.getItem('cuidadiario_token');
+            if (!token) { show('stateNoAuth'); return; }
+
+            attempts++;
+            setProgress((attempts / MAX_ATTEMPTS) * 90);
+
             try {
-                const token = localStorage.getItem('cuidadiario_token');
-                const res = await fetch(`${API_BASE}/api/me`, {
+                // Llamar a /api/verify-subscription: consulta activamente MP y actualiza la DB
+                const qs  = preapprovalId ? `?preapproval_id=${encodeURIComponent(preapprovalId)}` : '';
+                const res = await fetch(`${API_BASE}/api/verify-subscription${qs}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 const data = await res.json();
-                // /api/me devuelve { usuario: { premium: ... } }
-                const isPremium = data.usuario?.premium || data.premium || false;
 
-                if (isPremium) {
-                    clearInterval(pollInterval);
-                    // Actualizar usuario en localStorage
+                if (data.premium) {
+                    // ✅ Premium activado — actualizar caché local y mostrar éxito
+                    clearTimeout(pollTimer);
                     const saved = JSON.parse(localStorage.getItem('cuidadiario_user') || '{}');
                     saved.premium = true;
                     localStorage.setItem('cuidadiario_user', JSON.stringify(saved));
+                    localStorage.removeItem('cuidadiario_mp_pending');
 
-                    document.getElementById('progressBar').style.width = '100%';
+                    setProgress(100);
                     setTimeout(() => {
                         show('stateSuccess');
-                        // Redirigir a la app después de 3 segundos
+                        // Redirigir a la app tras 3 segundos
                         setTimeout(() => { window.location.href = '../index.html'; }, 3000);
                     }, 400);
                     return;
                 }
-            } catch (e) {
-                console.warn('Error verificando premium:', e);
-            }
 
-            if (attempts >= MAX_ATTEMPTS) {
-                clearInterval(pollInterval);
-                show('statePending');
+                // Aún no activo — reintentar si quedan intentos
+                if (attempts < MAX_ATTEMPTS) {
+                    pollTimer = setTimeout(verifyAndActivate, 2500);
+                } else {
+                    // Agotamos los intentos: mostrar estado pendiente
+                    show('statePending');
+                }
+
+            } catch (err) {
+                console.warn('[premium-success] Error:', err);
+                if (attempts < MAX_ATTEMPTS) {
+                    pollTimer = setTimeout(verifyAndActivate, 2500);
+                } else {
+                    show('statePending');
+                }
             }
         }
 
         function init() {
             const token = localStorage.getItem('cuidadiario_token');
-            if (!token) {
-                show('stateNoAuth');
-                return;
-            }
+            if (!token) { show('stateNoAuth'); return; }
             show('stateLoading');
-            animateProgress();
+            verifyAndActivate();
         }
 
         init();
