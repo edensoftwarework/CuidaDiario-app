@@ -439,7 +439,7 @@ const Storage = {
             medicamentos: 3,
             citas: 3,
             tareas: 3,
-            contactos: 1
+            contactos: 2
         };
 
         return current < (limits[type] || Infinity);
@@ -466,7 +466,7 @@ const Storage = {
             this.getContactos()
         ]);
 
-        const FREE = { medicamentos: 3, citas: 3, tareas: 3, contactos: 1 };
+        const FREE = { medicamentos: 3, citas: 3, tareas: 3, contactos: 2 };
 
         return {
             premium: false,
@@ -514,8 +514,8 @@ const Storage = {
                 tareas,
                 sintomas,
                 contactos,
-                historial: this.getHistorialMedicamentos(),
-                signos: this.getSignosVitales(),
+                historial: await this.getHistorialMedicamentos(),
+                signos: await this.getSignosVitales(),
                 exportDate: new Date().toISOString()
             };
         } catch (error) {

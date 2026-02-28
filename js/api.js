@@ -482,6 +482,56 @@ const API = {
             headers: this.getHeaders()
         });
         return this.handleResponse(response);
+    },
+
+    // ========== CO-CUIDADOR: ACCESO COMPARTIDO (PREMIUM) ==========
+
+    /**
+     * Invita a otro usuario (por email) a ser co-cuidador de un paciente.
+     * @param {number} pacienteId
+     * @param {string} email
+     */
+    async inviteShare(pacienteId, email) {
+        const response = await fetch(`${this.BASE_URL}/api/share/${pacienteId}/invite`, {
+            method: 'POST',
+            headers: this.getHeaders(),
+            body: JSON.stringify({ email })
+        });
+        return this.handleResponse(response);
+    },
+
+    /**
+     * Acepta una invitación de co-cuidador usando el token recibido por email.
+     * @param {string} token
+     */
+    async acceptShare(token) {
+        const response = await fetch(`${this.BASE_URL}/api/share/accept?token=${encodeURIComponent(token)}`, {
+            headers: this.getHeaders()
+        });
+        return this.handleResponse(response);
+    },
+
+    /**
+     * Lista los co-cuidadores de un paciente (solo el dueño puede listarlos).
+     * @param {number} pacienteId
+     */
+    async listShares(pacienteId) {
+        const response = await fetch(`${this.BASE_URL}/api/share/list/${pacienteId}`, {
+            headers: this.getHeaders()
+        });
+        return this.handleResponse(response);
+    },
+
+    /**
+     * Revoca el acceso de un co-cuidador.
+     * @param {number} shareId - id de la fila en paciente_compartidos
+     */
+    async deleteShare(shareId) {
+        const response = await fetch(`${this.BASE_URL}/api/share/${shareId}`, {
+            method: 'DELETE',
+            headers: this.getHeaders()
+        });
+        return this.handleResponse(response);
     }
 };
 

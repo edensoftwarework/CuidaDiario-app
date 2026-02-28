@@ -270,29 +270,52 @@ const Payments = {
 
     /**
      * Verificar pago desde URL (para redirecciones de pasarelas)
-     * Útil para PayPal y Stripe que redirigen de vuelta a la app
+     * SEGURIDAD: NO activamos premium desde el frontend basándonos en URL params.
+     * El webhook de MercadoPago en el backend es la única fuente de verdad.
+     * Aquí solo mostramos un mensaje informativo y recargamos el perfil desde el servidor.
      */
     checkPaymentFromURL() {
         const urlParams = new URLSearchParams(window.location.search);
         
-        // MercadoPago
+        // MercadoPago — solo informativo, el backend activa premium vía webhook
         const mpStatus = urlParams.get('status');
         const mpPaymentId = urlParams.get('payment_id');
         
         if (mpStatus && mpPaymentId) {
-            if (mpStatus === 'approved') {
-                this.handleSuccessfulPayment({
-                    method: 'mercadopago',
-                    transactionId: mpPaymentId,
-                    amount: this.prices.ARS,
-                    currency: 'ARS'
-                });
-            } else {
-                alert('El pago no fue aprobado. Por favor, intenta nuevamente.');
-            }
-            
-            // Limpiar URL
+            // Limpiar URL primero
             window.history.replaceState({}, document.title, window.location.pathname);
+
+            if (mpStatus === 'approved') {
+                // Mostrar mensaje de éxito e intentar recargar el estado premium desde el servidor
+                if (typeof showToast === 'function') {
+                    showToast('¡Pago recibido! Verificando activación de Premium...', 'success', 5000);
+                }
+                // Refrescar datos del usuario desde el backend (el webhook ya activó premium)
+                setTimeout(async () => {
+                    try {
+                        const token = typeof API !== 'undefined' ? API.getToken() : null;
+                        if (token) {
+                            const resp = await fetch(`${typeof API !== 'undefined' ? API.BASE_URL : ''}/api/me`, {
+                                headers: { 'Authorization': `Bearer ${token}` }
+                            });
+                            if (resp.ok) {
+                                const data = await resp.json();
+                                if (data.usuario?.premium) {
+                                    if (typeof Storage !== 'undefined') Storage.setPremiumStatus(true);
+                                    if (typeof updatePremiumStatus === 'function') updatePremiumStatus();
+                                    if (typeof showToast === 'function') showToast('¡Premium activado! Bienvenido.', 'success', 5000);
+                                } else {
+                                    if (typeof showToast === 'function') showToast('Tu pago está siendo procesado. Premium se activará en breve.', 'info', 6000);
+                                }
+                            }
+                        }
+                    } catch (e) { console.warn('[Payments] No se pudo verificar estado premium:', e); }
+                }, 2500);
+            } else {
+                if (typeof showToast === 'function') {
+                    showToast('El pago no fue aprobado. Podés intentarlo nuevamente.', 'error', 5000);
+                }
+            }
         }
 
         // PAYPAL — deshabilitado temporalmente

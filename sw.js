@@ -6,9 +6,15 @@
  *  - Cache de assets (soporte offline básico)
  *  - Push Notifications (recordatorios aunque la app esté cerrada)
  *  - Notification click (abre la app o enfoca la pestaña)
+ *  - Modo offline completo (v6):
+ *      · Assets: network-first con fallback a cache
+ *      · API GETs: stale-while-revalidate (muestra datos cacheados, actualiza en background)
+ *      · API escrituras (POST/PUT/DELETE): cola de sincronización offline
  */
 
-const CACHE_NAME = 'cuidadiario-v5';
+const CACHE_NAME     = 'cuidadiario-v6';
+const API_CACHE_NAME = 'cuidadiario-api-v6';
+
 const ASSETS = [
     '/',
     '/index.html',
@@ -23,6 +29,24 @@ const ASSETS = [
     '/icon.svg',
     '/badge.svg'
 ];
+
+// Endpoints de API cuyas respuestas deben cachearse para modo offline
+// Solo GETs de datos del usuario (pacientes, medicamentos, citas, tareas, síntomas, contactos, signos, historial)
+const CACHEABLE_API_PATTERNS = [
+    /\/api\/pacientes(\?|$)/,
+    /\/api\/medicamentos(\?|$)/,
+    /\/api\/citas(\?|$)/,
+    /\/api\/tareas(\?|$)/,
+    /\/api\/sintomas(\?|$)/,
+    /\/api\/contactos(\?|$)/,
+    /\/api\/signos-vitales(\?|$)/,
+    /\/api\/historial-medicamentos(\?|$)/,
+    /\/api\/me(\?|$)/,
+    /\/api\/push\/vapid-key(\?|$)/
+];
+
+// Cola de solicitudes fallidas por falta de conexión (escrituras)
+const OFFLINE_QUEUE_KEY = 'cuidadiario-offline-queue';
 
 // ===== INSTALL: pre-cachear assets =====
 self.addEventListener('install', (event) => {
@@ -39,34 +63,159 @@ self.addEventListener('activate', (event) => {
     event.waitUntil(
         caches.keys()
             .then(keys => Promise.all(
-                keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))
+                keys.filter(k => k !== CACHE_NAME && k !== API_CACHE_NAME)
+                    .map(k => caches.delete(k))
             ))
             .then(() => self.clients.claim())
     );
 });
 
-// ===== FETCH: Network first, fallback a cache =====
+// ===== FETCH =====
 self.addEventListener('fetch', (event) => {
-    // No interceptar peticiones no-GET ni llamadas a la API
-    if (event.request.method !== 'GET') return;
-    if (event.request.url.includes('/api/')) return;
-    if (event.request.url.includes('railway.app')) return;
-    if (event.request.url.includes('paypal.com')) return;
-    if (event.request.url.includes('mercadopago.com')) return;
+    const { request } = event;
+    const url = request.url;
 
-    event.respondWith(
-        fetch(event.request)
-            .then(response => {
-                // Guardar copia fresca en cache
-                if (response.ok) {
-                    const clone = response.clone();
-                    caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-                }
-                return response;
-            })
-            .catch(() => caches.match(event.request))
-    );
+    // Ignorar peticiones de terceros (MercadoPago, PayPal, Google, etc.)
+    if (!url.startsWith(self.location.origin) && !url.includes('railway.app')) return;
+
+    // Ignorar chrome-extension y otras URL no http
+    if (!url.startsWith('http')) return;
+
+    // ── API GETs: stale-while-revalidate ──────────────────────────────────────
+    if (request.method === 'GET' && isCacheableApi(url)) {
+        event.respondWith(staleWhileRevalidate(request));
+        return;
+    }
+
+    // ── API no-GET (POST, PUT, DELETE): intentar red, encolar si offline ──────
+    if (request.method !== 'GET' && isApiRequest(url)) {
+        event.respondWith(networkWithOfflineQueue(request));
+        return;
+    }
+
+    // ── Assets estáticos: network-first con fallback a cache ──────────────────
+    if (request.method === 'GET') {
+        event.respondWith(networkFirstAsset(request));
+    }
 });
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function isApiRequest(url) {
+    return url.includes('/api/') || url.includes('railway.app');
+}
+
+function isCacheableApi(url) {
+    return CACHEABLE_API_PATTERNS.some(p => p.test(url)) || (url.includes('railway.app') && CACHEABLE_API_PATTERNS.some(p => p.test(url)));
+}
+
+/**
+ * Stale-while-revalidate para API GETs:
+ * 1. Devuelve la respuesta cacheada inmediatamente si existe (modo offline: datos frescos del último uso)
+ * 2. Lanza la petición a la red en paralelo
+ * 3. Si la red responde OK, actualiza el cache en background
+ * 4. Si no hay cache y la red falla, devuelve un JSON de error apropiado
+ */
+async function staleWhileRevalidate(request) {
+    const cache = await caches.open(API_CACHE_NAME);
+    const cached = await cache.match(request);
+
+    const networkPromise = fetch(request.clone())
+        .then(response => {
+            if (response.ok) {
+                cache.put(request, response.clone()).catch(() => {});
+            }
+            return response;
+        })
+        .catch(() => null);
+
+    if (cached) {
+        // Tenemos cache: devolver inmediatamente y actualizar en background
+        networkPromise.catch(() => {}); // fire-and-forget
+        // Clonar la respuesta cacheada añadiendo header indicando que viene del cache
+        const headers = new Headers(cached.headers);
+        headers.set('X-SW-Cache', 'stale');
+        return new Response(cached.body, {
+            status: cached.status,
+            statusText: cached.statusText,
+            headers
+        });
+    }
+
+    // Sin cache: esperar a la red
+    const networkResponse = await networkPromise;
+    if (networkResponse) return networkResponse;
+
+    // Sin cache y sin red: respuesta de error offline
+    return new Response(
+        JSON.stringify({ error: 'Sin conexión. Los datos se mostrarán cuando vuelvas a conectarte.', offline: true }),
+        { status: 503, headers: { 'Content-Type': 'application/json', 'X-SW-Cache': 'offline' } }
+    );
+}
+
+/**
+ * Network-first para assets estáticos: red → cache → offline fallback
+ */
+async function networkFirstAsset(request) {
+    const cache = await caches.open(CACHE_NAME);
+    try {
+        const response = await fetch(request);
+        if (response.ok) cache.put(request, response.clone()).catch(() => {});
+        return response;
+    } catch {
+        const cached = await cache.match(request);
+        if (cached) return cached;
+        // Fallback para navegación: devolver index.html desde cache (SPA offline)
+        if (request.mode === 'navigate') {
+            const root = await cache.match('/index.html') || await cache.match('/');
+            if (root) return root;
+        }
+        return new Response('Sin conexión', { status: 503 });
+    }
+}
+
+/**
+ * Para escrituras (POST/PUT/DELETE): intentar red.
+ * Si falla por offline, encolar en IndexedDB para reintento cuando vuelva la conexión.
+ */
+async function networkWithOfflineQueue(request) {
+    try {
+        return await fetch(request.clone());
+    } catch (err) {
+        // Encolar la solicitud para sync posterior
+        try {
+            const body = await request.clone().text().catch(() => '');
+            const queued = {
+                url: request.url,
+                method: request.method,
+                headers: Object.fromEntries(request.headers.entries()),
+                body,
+                timestamp: Date.now()
+            };
+            // Guardar en localStorage vía cliente (IDB no está disponible directamente en SW sin lib)
+            // Notificar a los clientes para que encolen
+            const clientList = await self.clients.matchAll({ includeUncontrolled: true });
+            clientList.forEach(client => client.postMessage({ type: 'OFFLINE_REQUEST_QUEUED', request: queued }));
+        } catch { /* OK */ }
+
+        return new Response(
+            JSON.stringify({ error: 'Sin conexión. El cambio se guardará cuando vuelvas a conectarte.', offline: true, queued: true }),
+            { status: 503, headers: { 'Content-Type': 'application/json' } }
+        );
+    }
+}
+
+// ===== BACKGROUND SYNC: reintentar escrituras encoladas =====
+self.addEventListener('sync', (event) => {
+    if (event.tag === 'offline-queue-sync') {
+        event.waitUntil(
+            self.clients.matchAll({ includeUncontrolled: true }).then(clientList => {
+                clientList.forEach(client => client.postMessage({ type: 'PROCESS_OFFLINE_QUEUE' }));
+            })
+        );
+    }
+});
+
 
 // ===== PUSH: recibir notificación del backend =====
 self.addEventListener('push', (event) => {

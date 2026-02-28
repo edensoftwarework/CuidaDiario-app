@@ -62,6 +62,9 @@ async function initApp() {
     // Aplicar traducciones según idioma guardado
     if (window.I18n) I18n.apply();
 
+    // Procesar token de invitación de co-cuidador (?share=TOKEN)
+    processShareInviteToken();
+
     // Mostrar onboarding solo la primera vez
     setTimeout(showOnboarding, 800);
 }
@@ -727,6 +730,9 @@ async function renderCitasList(filter = 'todas') {
     container.innerHTML = filtered.map(cita => {
         const citaDate = new Date(cita.fecha);
         const isPast = citaDate < now;
+        const gcalBtn = limits.premium
+            ? `<button class="btn-icon" onclick="addCitaToGoogleCalendar('${encodeURIComponent(cita.titulo)}','${cita.fecha}','${cita.hora || ''}','${encodeURIComponent(cita.lugar || '')}','${encodeURIComponent(cita.notas || '')}')" title="Agregar a Google Calendar">📅</button>`
+            : '';
         
         return `
             <div class="item-card">
@@ -736,6 +742,7 @@ async function renderCitasList(filter = 'todas') {
                         <p class="item-subtitle">${formatDate(cita.fecha)} - ${cita.hora}</p>
                     </div>
                     <div class="item-actions">
+                        ${gcalBtn}
                         <button class="btn-icon" onclick="editCita('${cita.id}')" title="Editar">✏️</button>
                         <button class="btn-icon" onclick="deleteCita('${cita.id}')" title="Eliminar">🗑️</button>
                     </div>
@@ -770,7 +777,8 @@ async function renderCitasList(filter = 'todas') {
 
 async function filterCitas(filter) {
     document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
-    event.target.classList.add('active');
+    const activeBtn = (typeof event !== 'undefined' && event?.target) ? event.target : null;
+    if (activeBtn) activeBtn.classList.add('active');
     await renderCitasList(filter);
 }
 
@@ -1019,35 +1027,16 @@ function formatEstadoAnimo(estado) {
 
 function switchSintomaTab(tab) {
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-    event.target.classList.add('active');
-    
+    const activeBtn = (typeof event !== 'undefined' && event?.target) ? event.target : null;
+    if (activeBtn) activeBtn.classList.add('active');
+
     document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.remove('active'));
-    
+
     if (tab === 'registros') {
         document.getElementById('sintomas-registros').classList.add('active');
     } else if (tab === 'signos') {
         document.getElementById('sintomas-signos').classList.add('active');
-    } else if (tab === 'graficas') {
-        if (!Storage.getPremiumStatus()) {
-            showPremiumModal();
-            return;
-        }
-        document.getElementById('sintomas-graficas').classList.add('active');
-        renderGraficas();
     }
-}
-
-function renderGraficas() {
-    // Implementación simplificada de gráficas
-    const container = document.getElementById('chartContainer');
-    const signos = Storage.getSignosVitales();
-    
-    if (signos.length < 3) {
-        container.innerHTML = '<p class="info-message">Necesitas al menos 3 registros para generar gráficas</p>';
-        return;
-    }
-    
-    container.innerHTML = '<p class="info-message">Las gráficas visuales se pueden implementar con bibliotecas como Chart.js. Por ahora, revisa el historial de signos vitales en la pestaña anterior.</p>';
 }
 
 function openSintomaModal() {
@@ -1213,11 +1202,11 @@ async function loadTareas(filter = 'todas') {
     const today = new Date().toISOString().split('T')[0];
     
     if (filter === 'hoy') {
-        filtered = tareas.filter(t => t.fecha === today);
+        filtered = tareasBase.filter(t => t.fecha === today);
     } else if (filter === 'pendientes') {
-        filtered = tareas.filter(t => !t.completada);
+        filtered = tareasBase.filter(t => !t.completada);
     } else if (filter === 'completadas') {
-        filtered = tareas.filter(t => t.completada);
+        filtered = tareasBase.filter(t => t.completada);
     }
     
     // Ordenar por fecha y hora
@@ -1240,6 +1229,7 @@ async function loadTareas(filter = 'todas') {
                     <p class="item-subtitle">${formatDate(tarea.fecha)}${tarea.hora ? ` - ${tarea.hora}` : ''}</p>
                 </div>
                 <div class="item-actions">
+                    ${limits.premium ? `<button class="btn-icon" onclick="addTareaToGoogleCalendar('${encodeURIComponent(tarea.titulo)}','${tarea.fecha}','${tarea.hora || ''}','${encodeURIComponent(tarea.descripcion || '')}')" title="Agregar a Google Calendar">📅</button>` : ''}
                     <button class="btn-icon" onclick="toggleTareaCompletada('${tarea.id}')" title="${tarea.completada ? 'Marcar pendiente' : 'Completar'}">
                         ${tarea.completada ? '↩️' : '✓'}
                     </button>
@@ -1287,6 +1277,154 @@ function formatFrecuenciaTarea(frecuencia) {
         'mensual': 'Mensual'
     };
     return map[frecuencia] || frecuencia;
+}
+
+// ========== GOOGLE CALENDAR (PREMIUM) ==========
+// Crea un enlace de Google Calendar y lo abre en una nueva pestaña.
+// Requiere plan Premium — los botones solo se renderizan para usuarios premium.
+function addCitaToGoogleCalendar(encodedTitulo, fecha, hora, encodedLugar, encodedNotas) {
+    const titulo = decodeURIComponent(encodedTitulo);
+    const lugar  = decodeURIComponent(encodedLugar);
+    const notas  = decodeURIComponent(encodedNotas);
+    const dateStr = fecha.replace(/-/g, '');
+    let startDt, endDt;
+    if (hora && hora.length >= 5) {
+        const [h, m] = hora.split(':').map(Number);
+        const endH = String((h + 1) % 24).padStart(2, '0');
+        startDt = `${dateStr}T${String(h).padStart(2,'0')}${String(m).padStart(2,'0')}00`;
+        endDt   = `${dateStr}T${endH}${String(m).padStart(2,'0')}00`;
+    } else {
+        startDt = endDt = dateStr;
+    }
+    const details = [lugar && `Lugar: ${lugar}`, notas].filter(Boolean).join('\n');
+    const url = `https://calendar.google.com/calendar/render?action=TEMPLATE` +
+        `&text=${encodeURIComponent(titulo)}` +
+        `&dates=${startDt}/${endDt}` +
+        (details ? `&details=${encodeURIComponent(details)}` : '');
+    window.open(url, '_blank', 'noopener');
+}
+
+function addTareaToGoogleCalendar(encodedTitulo, fecha, hora, encodedDesc) {
+    const titulo = decodeURIComponent(encodedTitulo);
+    const desc   = decodeURIComponent(encodedDesc);
+    const dateStr = fecha.replace(/-/g, '');
+    let startDt, endDt;
+    if (hora && hora.length >= 5) {
+        const [h, m] = hora.split(':').map(Number);
+        const endH = String((h + 1) % 24).padStart(2, '0');
+        startDt = `${dateStr}T${String(h).padStart(2,'0')}${String(m).padStart(2,'0')}00`;
+        endDt   = `${dateStr}T${endH}${String(m).padStart(2,'0')}00`;
+    } else {
+        startDt = endDt = dateStr;
+    }
+    const url = `https://calendar.google.com/calendar/render?action=TEMPLATE` +
+        `&text=${encodeURIComponent('✓ ' + titulo)}` +
+        `&dates=${startDt}/${endDt}` +
+        (desc ? `&details=${encodeURIComponent(desc)}` : '');
+    window.open(url, '_blank', 'noopener');
+}
+
+// ========== CO-CUIDADOR: GESTIÓN DE ACCESO COMPARTIDO (PREMIUM) ==========
+
+/**
+ * Abre el panel de co-cuidadores de un paciente dentro de gestionPacientesModal.
+ * @param {number} pacienteId
+ * @param {string} pacienteNombre
+ */
+async function openSharePanel(pacienteId, pacienteNombre) {
+    const container = document.getElementById('pacientesListContainer');
+    container.innerHTML = `
+        <div style="padding:8px 0;">
+            <button onclick="loadPacientesList()" style="background:none;border:none;color:var(--primary,#667eea);cursor:pointer;font-size:0.9rem;padding:0 0 12px;font-weight:600;">← Volver</button>
+            <h4 style="margin:0 0 14px;">👥 Co-cuidadores de <strong>${pacienteNombre}</strong></h4>
+            <p style="color:#777;font-size:0.82rem;margin-bottom:14px;">Los co-cuidadores pueden ver medicamentos, citas, tareas y más. No pueden eliminar datos.</p>
+            <div id="sharesList"><p style="color:#aaa;font-size:0.9rem;">Cargando...</p></div>
+            <div style="border-top:1px solid #eee;padding-top:14px;margin-top:14px;">
+                <label style="font-weight:600;font-size:0.9rem;display:block;margin-bottom:8px;">Invitar familiar por email</label>
+                <div style="display:flex;gap:8px;">
+                    <input type="email" id="shareInviteEmail" placeholder="email@ejemplo.com"
+                        style="flex:1;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:0.9rem;">
+                    <button class="btn-primary" onclick="sendShareInvite(${pacienteId}, '${pacienteNombre.replace(/'/g, "\\'")}')"
+                        style="white-space:nowrap;padding:8px 16px;">Invitar</button>
+                </div>
+            </div>
+        </div>
+    `;
+    await _reloadSharesList(pacienteId, pacienteNombre);
+}
+
+async function _reloadSharesList(pacienteId, pacienteNombre) {
+    const sl = document.getElementById('sharesList');
+    if (!sl) return;
+    try {
+        const shares = await API.listShares(pacienteId);
+        if (!shares.length) {
+            sl.innerHTML = '<p style="color:#aaa;font-size:0.9rem;margin:0 0 14px;">Ningún co-cuidador agregado aún.</p>';
+        } else {
+            sl.innerHTML = `<div style="margin-bottom:14px;">${shares.map(s => `
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f3f3f3;">
+                    <div>
+                        <span style="font-size:0.9rem;font-weight:500;">${s.invitado_email}</span>
+                        <span style="font-size:0.78rem;margin-left:8px;color:${s.aceptado ? '#4CAF50' : '#FF9800'};">
+                            ${s.aceptado ? '✓ Activo' : '⏳ Invitación pendiente'}
+                        </span>
+                    </div>
+                    <button class="btn-icon" onclick="revokeShare(${s.id}, ${pacienteId}, '${pacienteNombre.replace(/'/g, "\\'")}')"
+                        title="Revocar acceso" style="color:#e53935;">🗑️</button>
+                </div>
+            `).join('')}</div>`;
+        }
+    } catch (e) {
+        if (sl) sl.innerHTML = `<p style="color:#e53935;font-size:0.9rem;">Error: ${e.message}</p>`;
+    }
+}
+
+async function sendShareInvite(pacienteId, pacienteNombre) {
+    const emailInput = document.getElementById('shareInviteEmail');
+    const email = emailInput?.value?.trim();
+    if (!email || !email.includes('@')) {
+        showToast('Ingresá un email válido', 'error');
+        return;
+    }
+    try {
+        await API.inviteShare(pacienteId, email);
+        showToast(`✅ Invitación enviada a ${email}`, 'success');
+        if (emailInput) emailInput.value = '';
+        await _reloadSharesList(pacienteId, pacienteNombre);
+    } catch (e) {
+        showToast(e.message || 'Error al enviar invitación', 'error');
+    }
+}
+
+async function revokeShare(shareId, pacienteId, pacienteNombre) {
+    if (!confirm('¿Revocar el acceso de este co-cuidador?')) return;
+    try {
+        await API.deleteShare(shareId);
+        showToast('Acceso revocado correctamente', 'success');
+        await _reloadSharesList(pacienteId, pacienteNombre);
+    } catch (e) {
+        showToast(e.message || 'Error al revocar acceso', 'error');
+    }
+}
+
+// Procesar token de invitación de co-cuidador al cargar la app (?share=TOKEN)
+async function processShareInviteToken() {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('share');
+    if (!token) return;
+    // Limpiar URL inmediatamente
+    window.history.replaceState({}, document.title, window.location.pathname);
+    if (!API.isAuthenticated()) {
+        showToast('Iniciá sesión para aceptar la invitación de co-cuidador', 'info', 6000);
+        return;
+    }
+    try {
+        const result = await API.acceptShare(token);
+        showToast(`✅ ${result.mensaje || '¡Invitación aceptada!'} Paciente: ${result.paciente}`, 'success', 7000);
+        await loadPacienteSelector();
+    } catch (e) {
+        showToast(e.message || 'Error al aceptar la invitación', 'error');
+    }
 }
 
 async function filterTareas(filter) {
@@ -2059,6 +2197,7 @@ async function loadPacientesList() {
                     </div>
                     <div class="item-actions">
                         <button class="btn-icon" onclick="editPaciente(${p.id})" title="Editar">&#9999;&#65039;</button>
+                        ${isPremium ? `<button class="btn-icon" onclick="openSharePanel(${p.id}, '${p.nombre.replace(/'/g, "\\'")}'" title="Co-cuidadores">&#128101;</button>` : ''}
                         ${isPremium ? `<button class="btn-icon" onclick="deletePaciente(${p.id})" title="Eliminar">&#128465;&#65039;</button>` : ''}
                     </div>
                 </div>
@@ -2223,6 +2362,14 @@ window.closePacienteForm = closePacienteForm;
 window.savePaciente = savePaciente;
 window.editPaciente = editPaciente;
 window.deletePaciente = deletePaciente;
+// Co-cuidador
+window.openSharePanel = openSharePanel;
+window.sendShareInvite = sendShareInvite;
+window.revokeShare = revokeShare;
+window.processShareInviteToken = processShareInviteToken;
+// Google Calendar
+window.addCitaToGoogleCalendar = addCitaToGoogleCalendar;
+window.addTareaToGoogleCalendar = addTareaToGoogleCalendar;
 
 // ========== PERFIL DE USUARIO ==========
 
@@ -2472,13 +2619,26 @@ async function initPWA() {
         const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
         console.log('[SW] Registrado:', reg.scope);
 
-        // Escuchar mensajes del SW (ej: pushsubscriptionchange)
+        // Escuchar mensajes del SW (ej: pushsubscriptionchange, offline queue)
         navigator.serviceWorker.addEventListener('message', async (event) => {
             if (event.data?.type === 'PUSH_SUBSCRIPTION_CHANGED' && event.data.subscription) {
                 try {
                     await API.savePushSubscription(event.data.subscription);
                     console.log('[Push] Suscripción actualizada en backend');
                 } catch (e) { /* OK */ }
+            }
+            // Guardar solicitud offline en localStorage para reintento posterior
+            if (event.data?.type === 'OFFLINE_REQUEST_QUEUED' && event.data.request) {
+                try {
+                    const queue = JSON.parse(localStorage.getItem('cuidadiario_offline_queue') || '[]');
+                    queue.push(event.data.request);
+                    localStorage.setItem('cuidadiario_offline_queue', JSON.stringify(queue));
+                    console.log('[Offline] Solicitud encolada:', event.data.request.method, event.data.request.url);
+                } catch (e) { /* OK */ }
+            }
+            // Procesar cola cuando el SW indica que hay conexión
+            if (event.data?.type === 'PROCESS_OFFLINE_QUEUE') {
+                processOfflineQueue();
             }
         });
 
@@ -2638,7 +2798,92 @@ window.updateA2HSButton = updateA2HSButton;
 window.sendTestPush = sendTestPush;
 window.resyncPushSubscription = resyncPushSubscription;
 
-// ========== MENÚ DE CONFIGURACIÓN ==========
+// ========== MODO OFFLINE: COLA DE SINCRONIZACIÓN ==========
+
+/**
+ * Procesa la cola de solicitudes que fallaron por falta de conexión.
+ * Se llama cuando el navegador vuelve a estar online.
+ */
+async function processOfflineQueue() {
+    if (!navigator.onLine) return;
+    const raw = localStorage.getItem('cuidadiario_offline_queue');
+    if (!raw) return;
+    let queue;
+    try { queue = JSON.parse(raw); } catch { queue = []; }
+    if (!queue.length) return;
+
+    console.log(`[Offline] Procesando ${queue.length} solicitud(es) encolada(s)...`);
+    const failed = [];
+    for (const req of queue) {
+        try {
+            const init = { method: req.method, headers: req.headers };
+            if (req.body) init.body = req.body;
+            const response = await fetch(req.url, init);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            console.log(`[Offline] Reintento OK: ${req.method} ${req.url}`);
+        } catch (e) {
+            console.warn(`[Offline] Reintento fallido: ${req.method} ${req.url}`, e.message);
+            failed.push(req);
+        }
+    }
+    if (failed.length) {
+        localStorage.setItem('cuidadiario_offline_queue', JSON.stringify(failed));
+        showToast(`${failed.length} cambio(s) pendientes no se pudieron sincronizar.`, 'warning', 5000);
+    } else {
+        localStorage.removeItem('cuidadiario_offline_queue');
+        // Recargar datos para mostrar lo que se sincronizó
+        loadDashboard().catch(() => {});
+        showToast('✅ Datos sincronizados correctamente', 'success', 3000);
+    }
+}
+
+// Banner de estado offline/online
+function initOfflineDetection() {
+    const showBanner = (msg, color) => {
+        let banner = document.getElementById('offlineStatusBanner');
+        if (!banner) {
+            banner = document.createElement('div');
+            banner.id = 'offlineStatusBanner';
+            banner.style.cssText = `
+                position:fixed; top:0; left:0; right:0; z-index:10000;
+                padding:8px 16px; text-align:center; font-size:0.85rem;
+                font-weight:600; transition:background 0.3s;
+            `;
+            document.body.prepend(banner);
+        }
+        banner.style.background = color;
+        banner.style.color = '#fff';
+        banner.textContent = msg;
+        banner.style.display = 'block';
+    };
+    const hideBanner = () => {
+        const b = document.getElementById('offlineStatusBanner');
+        if (b) b.style.display = 'none';
+    };
+
+    window.addEventListener('offline', () => {
+        showBanner('📵 Sin conexión — mostrando datos guardados', '#e53935');
+    });
+    window.addEventListener('online', () => {
+        showBanner('✅ Conexión restaurada', '#43a047');
+        setTimeout(hideBanner, 3000);
+        processOfflineQueue();
+    });
+
+    // Estado inicial
+    if (!navigator.onLine) {
+        showBanner('📵 Sin conexión — mostrando datos guardados', '#e53935');
+    }
+}
+
+// Inicializar detección offline al cargar
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initOfflineDetection);
+} else {
+    initOfflineDetection();
+}
+
+
 
 function toggleSettingsMenu() {
     const menu = document.getElementById('settingsMenu');

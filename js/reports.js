@@ -34,7 +34,7 @@ const Reports = {
             return;
         }
 
-        const historial = Storage.getHistorialMedicamentos();
+        const historial = await Storage.getHistorialMedicamentos();
         const medicamentos = await Storage.getMedicamentos();
 
         const html = this.generateMedicamentosHTML(medicamentos, historial);
@@ -51,7 +51,7 @@ const Reports = {
         }
 
         const sintomas = await Storage.getSintomas();
-        const signos = Storage.getSignosVitales();
+        const signos = await Storage.getSignosVitales();
         const citas = await Storage.getCitas();
 
         const html = this.generateMedicoHTML(sintomas, signos, citas);
@@ -71,21 +71,23 @@ const Reports = {
             return itemDate >= fechaDesde && itemDate <= fechaHasta;
         };
 
-        const [medicamentos, citas, sintomas, tareas, contactos] = await Promise.all([
+        const [medicamentos, citas, sintomas, tareas, contactos, historialMed, signos] = await Promise.all([
             Storage.getMedicamentos(),
             Storage.getCitas(),
             Storage.getSintomas(),
             Storage.getTareas(),
-            Storage.getContactos()
+            Storage.getContactos(),
+            Storage.getHistorialMedicamentos(),
+            Storage.getSignosVitales()
         ]);
 
         return {
             periodo: { desde, hasta },
             medicamentos,
-            historialMed: Storage.getHistorialMedicamentos().filter(h => filterByDate(h, 'fecha')),
+            historialMed: historialMed.filter(h => filterByDate(h, 'fecha')),
             citas: citas.filter(c => filterByDate({ fecha: c.fecha }, 'fecha')),
             sintomas: sintomas.filter(s => filterByDate(s, 'fecha')),
-            signos: Storage.getSignosVitales().filter(s => filterByDate(s, 'fecha')),
+            signos: signos.filter(s => filterByDate(s, 'fecha')),
             tareas: tareas.filter(t => filterByDate(t, 'fecha')),
             contactos
         };
@@ -292,14 +294,14 @@ const Reports = {
         }
 
         try {
-            const [medicamentos, citas, tareas, sintomas, contactos] = await Promise.all([
+            const [medicamentos, citas, tareas, sintomas, contactos, signos] = await Promise.all([
                 Storage.getMedicamentos(),
                 Storage.getCitas(),
                 Storage.getTareas(),
                 Storage.getSintomas(),
-                Storage.getContactos()
+                Storage.getContactos(),
+                Storage.getSignosVitales ? Storage.getSignosVitales() : Promise.resolve([])
             ]);
-            const signos = Storage.getSignosVitales ? (Storage.getSignosVitales() || []) : [];
 
             // Escapa un valor para CSV (envuelve en comillas y escapa las internas)
             const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
