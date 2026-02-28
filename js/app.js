@@ -78,10 +78,11 @@ async function initApp() {
 
 // Detecta si el usuario acaba de volver de pagar en MercadoPago y activa premium si corresponde
 async function checkMercadoPagoReturn() {
-    const urlParams  = new URLSearchParams(window.location.search);
-    const mpPending  = localStorage.getItem('cuidadiario_mp_pending');
+    const urlParams   = new URLSearchParams(window.location.search);
+    const mpPending   = localStorage.getItem('cuidadiario_mp_pending');
+    const mpActivated = urlParams.get('mp_activated') === '1'; // redirigido desde premium-success.html
 
-    if (!mpPending) return; // No venía de pagar
+    if (!mpPending && !mpActivated) return; // No venía de pagar
 
     localStorage.removeItem('cuidadiario_mp_pending');
     // Limpiar query params de la URL sin recargar
@@ -116,11 +117,11 @@ async function checkMercadoPagoReturn() {
 }
 
 // Verifica en background si el usuario premium canceló su suscripción en MP.
-// Corre silenciosamente en cada apertura de la app.
+// Corre silenciosamente en cada apertura de la app y cada 30 minutos.
 async function _syncMPCancellation() {
     if (!API.isAuthenticated()) return;
     const user = API.getUser();
-    if (!user?.premium) return; // Solo necesario si figura como premium
+    if (!user) return;
     try {
         const token = API.getToken();
         const res = await fetch(`${API.BASE_URL}/api/verify-subscription`, {
@@ -128,8 +129,17 @@ async function _syncMPCancellation() {
         });
         if (!res.ok) return;
         const data = await res.json();
-        // Si el backend confirma que ya no tiene suscripción activa → bajar premium en UI
-        if (data.premium === false && ['cancelled','paused','expired'].includes(data.status)) {
+        // Activación: el backend confirmó premium pero localStorage lo tenía como false
+        if (data.premium && !user.premium) {
+            user.premium = true;
+            API.setUser(user);
+            updatePremiumStatus();
+            await loadDashboard();
+            showToast('🎉 ¡Premium activado!', 'success', 5000);
+        }
+        // Cancelación: el backend confirmó que ya no tiene suscripción activa
+        else if (data.premium === false && user.premium &&
+            ['cancelled', 'paused', 'expired'].includes(data.status)) {
             user.premium = false;
             API.setUser(user);
             updatePremiumStatus();
@@ -137,6 +147,8 @@ async function _syncMPCancellation() {
             showToast('🔔 Tu suscripción Premium fue cancelada o expiró.', 'info', 7000);
         }
     } catch { /* sin conexión: ignorar */ }
+    // Repetir cada 30 minutos mientras la página esté abierta
+    setTimeout(_syncMPCancellation, 30 * 60 * 1000);
 }
 
 // ========== NAVEGADOR DE SECCIONES (flechas) ==========
@@ -1371,9 +1383,12 @@ function addCitaToGoogleCalendar(encodedTitulo, fecha, hora, encodedLugar, encod
         startDt = endDt = dateStr;
     }
     const details = [lugar && `Lugar: ${lugar}`, notas].filter(Boolean).join('\n');
+    // ctz indica la zona horaria de los timestamps (sin Z = local, con ctz = correcto)
+    const tz = 'America/Argentina/Buenos_Aires';
     const url = `https://calendar.google.com/calendar/render?action=TEMPLATE` +
         `&text=${encodeURIComponent(titulo)}` +
         `&dates=${startDt}/${endDt}` +
+        `&ctz=${encodeURIComponent(tz)}` +
         (details ? `&details=${encodeURIComponent(details)}` : '');
     window.open(url, '_blank', 'noopener');
 }
@@ -1820,8 +1835,8 @@ function updatePremiumStatus() {
         premiumStatus.style.display = 'block';
         premiumStatus.innerHTML = `
             <span class="premium-badge">✓ Usuario Premium</span>
-            <span style="font-size:0.82em;margin-left:12px;color:rgba(255,255,255,0.7);">
-                Para cancelar: <a href="https://www.mercadopago.com.ar/subscriptions" target="_blank" style="color:#f0c040;text-decoration:underline;">MercadoPago → Mis suscripciones</a>
+            <span style="font-size:0.82em;margin-left:12px;color:#5a3e00;">
+                Para cancelar: <a href="https://www.mercadopago.com.ar/subscriptions" target="_blank" style="color:#7a4e00;font-weight:700;text-decoration:underline;">MercadoPago → Mis suscripciones</a>
             </span>
         `;
         premiumText.textContent = '✓ Premium';
@@ -2273,7 +2288,7 @@ async function loadPacientesList() {
                     </div>
                     <div class="item-actions">
                         <button class="btn-icon" onclick="editPaciente(${p.id})" title="Editar">&#9999;&#65039;</button>
-                        ${isPremium ? `<button class="btn-icon" onclick="openSharePanel(${p.id}, '${p.nombre.replace(/'/g, "\\'")}'" title="Co-cuidadores">&#128101;</button>` : ''}
+                        ${isPremium ? `<button class="btn-icon" onclick="openSharePanel(${p.id}, '${p.nombre.replace(/'/g, "\\'")}')" title="Co-cuidadores">&#128101;</button>` : ''}
                         ${isPremium ? `<button class="btn-icon" onclick="deletePaciente(${p.id})" title="Eliminar">&#128465;&#65039;</button>` : ''}
                     </div>
                 </div>

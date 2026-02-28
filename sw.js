@@ -12,8 +12,8 @@
  *      · API escrituras (POST/PUT/DELETE): cola de sincronización offline
  */
 
-const CACHE_NAME     = 'cuidadiario-v6';
-const API_CACHE_NAME = 'cuidadiario-api-v6';
+const CACHE_NAME     = 'cuidadiario-v7';
+const API_CACHE_NAME = 'cuidadiario-api-v7';
 
 const ASSETS = [
     '/',
@@ -41,7 +41,7 @@ const CACHEABLE_API_PATTERNS = [
     /\/api\/contactos(\?|$)/,
     /\/api\/signos-vitales(\?|$)/,
     /\/api\/historial-medicamentos(\?|$)/,
-    /\/api\/me(\?|$)/,
+    // NOTA: /api/me NO se cachea — el estado premium debe ser siempre fresco
     /\/api\/push\/vapid-key(\?|$)/
 ];
 

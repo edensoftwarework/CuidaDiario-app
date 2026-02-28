@@ -237,16 +237,18 @@ body {
 
 .premium-status {
     background: linear-gradient(135deg, #FFD700, #FFA500);
-    color: var(--text-primary);
+    color: #3d2800;
     padding: 15px 20px;
     border-radius: var(--border-radius);
     margin-bottom: 20px;
     text-align: center;
     font-weight: 600;
+    border: 1px solid #e69500;
 }
 
 .premium-badge {
     font-size: 1.1rem;
+    color: #3d2800;
 }
 
 /* Banner de bienvenida */
