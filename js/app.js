@@ -14,6 +14,10 @@ async function initApp() {
     // Recargar estado premium desde el backend (captura cancelaciones via webhook)
     await API.refreshUser();
 
+    // Verificar en background si la suscripción MP fue cancelada
+    // (garantiza que el estado sea correcto en cada apertura de la app)
+    _syncMPCancellation();
+
     // Inicializar estado de la app
     updatePremiumStatus();
     setupNavigation();
@@ -109,6 +113,30 @@ async function checkMercadoPagoReturn() {
         if (attempts < 10) setTimeout(tryVerify, 2500);
     }
     setTimeout(tryVerify, 1500); // pequeño delay inicial
+}
+
+// Verifica en background si el usuario premium canceló su suscripción en MP.
+// Corre silenciosamente en cada apertura de la app.
+async function _syncMPCancellation() {
+    if (!API.isAuthenticated()) return;
+    const user = API.getUser();
+    if (!user?.premium) return; // Solo necesario si figura como premium
+    try {
+        const token = API.getToken();
+        const res = await fetch(`${API.BASE_URL}/api/verify-subscription`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        // Si el backend confirma que ya no tiene suscripción activa → bajar premium en UI
+        if (data.premium === false && ['cancelled','paused','expired'].includes(data.status)) {
+            user.premium = false;
+            API.setUser(user);
+            updatePremiumStatus();
+            await loadDashboard();
+            showToast('🔔 Tu suscripción Premium fue cancelada o expiró.', 'info', 7000);
+        }
+    } catch { /* sin conexión: ignorar */ }
 }
 
 // ========== NAVEGADOR DE SECCIONES (flechas) ==========
@@ -775,7 +803,7 @@ async function renderCitasList(filter = 'todas') {
         const citaDate = new Date(cita.fecha);
         const isPast = citaDate < now;
         const gcalBtn = limits.premium
-            ? `<button class="btn-icon" onclick="addCitaToGoogleCalendar('${encodeURIComponent(cita.titulo)}','${cita.fecha}','${cita.hora || ''}','${encodeURIComponent(cita.lugar || '')}','${encodeURIComponent(cita.notas || '')}')" title="Agregar a Google Calendar">📅</button>`
+            ? `<button class="btn-icon btn-gcal" onclick="addCitaToGoogleCalendar('${encodeURIComponent(cita.titulo)}','${cita.fecha}','${cita.hora || ''}','${encodeURIComponent(cita.lugar || '')}','${encodeURIComponent(cita.notas || '')}')" title="Agregar a Google Calendar">📅 Google Cal</button>`
             : '';
         
         return `
@@ -1275,7 +1303,7 @@ async function loadTareas(filter = 'todas') {
                     <p class="item-subtitle">${formatDate(tarea.fecha)}${tarea.hora ? ` - ${tarea.hora}` : ''}</p>
                 </div>
                 <div class="item-actions">
-                    ${limits.premium ? `<button class="btn-icon" onclick="addTareaToGoogleCalendar('${encodeURIComponent(tarea.titulo)}','${tarea.fecha}','${tarea.hora || ''}','${encodeURIComponent(tarea.descripcion || '')}')" title="Agregar a Google Calendar">📅</button>` : ''}
+                    ${limits.premium ? `<button class="btn-icon btn-gcal" onclick="addTareaToGoogleCalendar('${encodeURIComponent(tarea.titulo)}','${tarea.fecha}','${tarea.hora || ''}','${encodeURIComponent(tarea.descripcion || '')}')" title="Agregar a Google Calendar">📅 Google Cal</button>` : ''}
                     <button class="btn-icon" onclick="toggleTareaCompletada('${tarea.id}')" title="${tarea.completada ? 'Marcar pendiente' : 'Completar'}">
                         ${tarea.completada ? '↩️' : '✓'}
                     </button>
