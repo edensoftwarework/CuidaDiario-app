@@ -103,11 +103,12 @@ async function checkMercadoPagoReturn() {
             });
             const data = await res.json();
             if (data.premium) {
-                showToast('🎉 ¡Premium activado! Bienvenido.', 'success', 6000);
+                showToast('&#127881; ¡Premium activado! Bienvenido.', 'success', 6000);
                 await API.refreshUser();
                 updatePremiumStatus();
                 await loadPacienteSelector();
                 await loadDashboard();
+                showPremiumWelcomeModal();
                 return;
             }
         } catch (e) { /* continuar reintentando */ }
@@ -136,12 +137,14 @@ async function _syncMPCancellation() {
             updatePremiumStatus();
             await loadDashboard();
             showToast('🎉 ¡Premium activado!', 'success', 5000);
+            showPremiumWelcomeModal();
         }
         // Cancelación: el backend confirmó que ya no tiene suscripción activa
         else if (data.premium === false && user.premium &&
             ['cancelled', 'paused', 'expired'].includes(data.status)) {
             user.premium = false;
             API.setUser(user);
+            localStorage.removeItem('cuidadiario_premium_welcomed'); // permitir re-mostrar si vuelve a suscribirse
             updatePremiumStatus();
             await loadDashboard();
             showToast('🔔 Tu suscripción Premium fue cancelada o expiró.', 'info', 7000);
@@ -1372,23 +1375,24 @@ function addCitaToGoogleCalendar(encodedTitulo, fecha, hora, encodedLugar, encod
     const titulo = decodeURIComponent(encodedTitulo);
     const lugar  = decodeURIComponent(encodedLugar);
     const notas  = decodeURIComponent(encodedNotas);
-    const dateStr = fecha.replace(/-/g, '');
     let startDt, endDt;
     if (hora && hora.length >= 5) {
         const [h, m] = hora.split(':').map(Number);
-        const endH = String((h + 1) % 24).padStart(2, '0');
-        startDt = `${dateStr}T${String(h).padStart(2,'0')}${String(m).padStart(2,'0')}00`;
-        endDt   = `${dateStr}T${endH}${String(m).padStart(2,'0')}00`;
+        // La hora está en Argentina (UTC-3): construir fecha con offset explícito
+        // y convertir a UTC con Z suffix para que Google Calendar lo interprete siempre correcto
+        const startDate = new Date(`${fecha}T${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:00-03:00`);
+        const endDate   = new Date(startDate.getTime() + 60 * 60 * 1000);
+        const fmtUTC    = d => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
+        startDt = fmtUTC(startDate);
+        endDt   = fmtUTC(endDate);
     } else {
-        startDt = endDt = dateStr;
+        const d = fecha.replace(/-/g, '');
+        startDt = endDt = d;
     }
     const details = [lugar && `Lugar: ${lugar}`, notas].filter(Boolean).join('\n');
-    // ctz indica la zona horaria de los timestamps (sin Z = local, con ctz = correcto)
-    const tz = 'America/Argentina/Buenos_Aires';
     const url = `https://calendar.google.com/calendar/render?action=TEMPLATE` +
         `&text=${encodeURIComponent(titulo)}` +
         `&dates=${startDt}/${endDt}` +
-        `&ctz=${encodeURIComponent(tz)}` +
         (details ? `&details=${encodeURIComponent(details)}` : '');
     window.open(url, '_blank', 'noopener');
 }
@@ -1396,15 +1400,17 @@ function addCitaToGoogleCalendar(encodedTitulo, fecha, hora, encodedLugar, encod
 function addTareaToGoogleCalendar(encodedTitulo, fecha, hora, encodedDesc) {
     const titulo = decodeURIComponent(encodedTitulo);
     const desc   = decodeURIComponent(encodedDesc);
-    const dateStr = fecha.replace(/-/g, '');
     let startDt, endDt;
     if (hora && hora.length >= 5) {
         const [h, m] = hora.split(':').map(Number);
-        const endH = String((h + 1) % 24).padStart(2, '0');
-        startDt = `${dateStr}T${String(h).padStart(2,'0')}${String(m).padStart(2,'0')}00`;
-        endDt   = `${dateStr}T${endH}${String(m).padStart(2,'0')}00`;
+        const startDate = new Date(`${fecha}T${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:00-03:00`);
+        const endDate   = new Date(startDate.getTime() + 60 * 60 * 1000);
+        const fmtUTC    = d => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
+        startDt = fmtUTC(startDate);
+        endDt   = fmtUTC(endDate);
     } else {
-        startDt = endDt = dateStr;
+        const d = fecha.replace(/-/g, '');
+        startDt = endDt = d;
     }
     const url = `https://calendar.google.com/calendar/render?action=TEMPLATE` +
         `&text=${encodeURIComponent('✓ ' + titulo)}` +
@@ -1825,6 +1831,42 @@ function confirmarBorrarDatos() {
 }
 
 // ========== PREMIUM ==========
+function showPremiumWelcomeModal() {
+    // Se muestra una única vez por suscripción activa.
+    // Si el usuario cancela y vuelve a suscribirse, se vuelve a mostrar.
+    if (localStorage.getItem('cuidadiario_premium_welcomed')) return;
+    localStorage.setItem('cuidadiario_premium_welcomed', '1');
+
+    const modal = document.createElement('div');
+    modal.id = 'premiumWelcomeModal';
+    modal.className = 'modal active';
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width:480px;text-align:center;">
+            <div style="font-size:3rem;margin-bottom:8px;">&#127881;</div>
+            <h2 style="color:#5a3e00;margin:0 0 6px;font-size:1.4rem;">&#161;Bienvenido a Premium!</h2>
+            <p style="color:#777;font-size:0.93rem;margin-bottom:18px;">Ahora tenés acceso a todas las funciones avanzadas de CuidaDiario.</p>
+            <div style="background:#fffbf0;border:1px solid #ffe08a;border-radius:12px;padding:16px 18px;text-align:left;margin-bottom:20px;">
+                <div style="font-weight:700;color:#5a3e00;margin-bottom:12px;font-size:0.95rem;">&#10024; Tus beneficios activos:</div>
+                <ul style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:10px;">
+                    <li style="font-size:0.9rem;">&#128101; <strong>Co-cuidadores</strong> — invitá familiares a ver los datos<br>
+                        <span style="font-size:0.8rem;color:#999;">Gestión de Pacientes → botón &#128101;</span></li>
+                    <li style="font-size:0.9rem;">&#128202; <strong>Reportes avanzados</strong> — exportá historial en PDF<br>
+                        <span style="font-size:0.8rem;color:#999;">Sección &quot;Reportes&quot; en el menú</span></li>
+                    <li style="font-size:0.9rem;">&#128197; <strong>Google Calendar</strong> — sincronizá citas y tareas<br>
+                        <span style="font-size:0.8rem;color:#999;">En cada cita y tarea → botón &#128197; Google Cal</span></li>
+                    <li style="font-size:0.9rem;">&#128138; <strong>Sin límites</strong> — medicamentos, citas, tareas y síntomas ilimitados</li>
+                    <li style="font-size:0.9rem;">&#128100; <strong>Múltiples pacientes</strong> — gestioná toda tu familia desde una cuenta</li>
+                </ul>
+            </div>
+            <button class="btn-primary" onclick="document.getElementById('premiumWelcomeModal').remove()"
+                style="width:100%;padding:14px;font-size:1rem;border-radius:10px;">
+                &#128640; &#161;Empezar a usar Premium!
+            </button>
+        </div>
+    `;
+    document.body.appendChild(modal);
+}
+
 function updatePremiumStatus() {
     const isPremium = Storage.getPremiumStatus();
     const btnPremium = document.getElementById('btnPremium');
@@ -2441,6 +2483,7 @@ window.saveContacto = saveContacto;
 window.switchContactoTab = switchContactoTab;
 window.showPremiumModal = showPremiumModal;
 window.closePremiumModal = closePremiumModal;
+window.showPremiumWelcomeModal = showPremiumWelcomeModal;
 window.confirmarBorrarDatos = confirmarBorrarDatos;
 window.closeWelcomeBanner = closeWelcomeBanner;
 window.updatePremiumStatus = updatePremiumStatus;

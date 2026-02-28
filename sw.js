@@ -6,14 +6,14 @@
  *  - Cache de assets (soporte offline básico)
  *  - Push Notifications (recordatorios aunque la app esté cerrada)
  *  - Notification click (abre la app o enfoca la pestaña)
- *  - Modo offline completo (v6):
+ *  - Modo offline completo (v7):
  *      · Assets: network-first con fallback a cache
- *      · API GETs: stale-while-revalidate (muestra datos cacheados, actualiza en background)
+ *      · API GETs: network-first con fallback a cache offline (datos siempre frescos cuando hay red)
  *      · API escrituras (POST/PUT/DELETE): cola de sincronización offline
  */
 
-const CACHE_NAME     = 'cuidadiario-v7';
-const API_CACHE_NAME = 'cuidadiario-api-v7';
+const CACHE_NAME     = 'cuidadiario-v8';
+const API_CACHE_NAME = 'cuidadiario-api-v8';
 
 const ASSETS = [
     '/',
@@ -81,9 +81,9 @@ self.addEventListener('fetch', (event) => {
     // Ignorar chrome-extension y otras URL no http
     if (!url.startsWith('http')) return;
 
-    // ── API GETs: stale-while-revalidate ──────────────────────────────────────
+    // ── API GETs: network-first, offline fallback a caché ──────────────────────
     if (request.method === 'GET' && isCacheableApi(url)) {
-        event.respondWith(staleWhileRevalidate(request));
+        event.respondWith(networkFirstApi(request));
         return;
     }
 
@@ -110,47 +110,38 @@ function isCacheableApi(url) {
 }
 
 /**
- * Stale-while-revalidate para API GETs:
- * 1. Devuelve la respuesta cacheada inmediatamente si existe (modo offline: datos frescos del último uso)
- * 2. Lanza la petición a la red en paralelo
- * 3. Si la red responde OK, actualiza el cache en background
- * 4. Si no hay cache y la red falla, devuelve un JSON de error apropiado
+ * Network-first para API GETs:
+ * 1. Intenta siempre la red primero → datos siempre frescos cuando hay conexión
+ * 2. Si falla (offline), devuelve la respuesta cacheada del último fetch exitoso
+ * 3. Si no hay cache y la red falla, devuelve un JSON de error apropiado
+ * Esto evita que datos viejos (stale) se muestren al volver a iniciar sesión.
  */
-async function staleWhileRevalidate(request) {
+async function networkFirstApi(request) {
     const cache = await caches.open(API_CACHE_NAME);
-    const cached = await cache.match(request);
-
-    const networkPromise = fetch(request.clone())
-        .then(response => {
-            if (response.ok) {
-                cache.put(request, response.clone()).catch(() => {});
-            }
-            return response;
-        })
-        .catch(() => null);
-
-    if (cached) {
-        // Tenemos cache: devolver inmediatamente y actualizar en background
-        networkPromise.catch(() => {}); // fire-and-forget
-        // Clonar la respuesta cacheada añadiendo header indicando que viene del cache
-        const headers = new Headers(cached.headers);
-        headers.set('X-SW-Cache', 'stale');
-        return new Response(cached.body, {
-            status: cached.status,
-            statusText: cached.statusText,
-            headers
-        });
+    try {
+        const response = await fetch(request.clone());
+        if (response.ok) {
+            cache.put(request, response.clone()).catch(() => {});
+        }
+        return response;
+    } catch {
+        // Sin red: intentar cache (modo offline)
+        const cached = await cache.match(request);
+        if (cached) {
+            const headers = new Headers(cached.headers);
+            headers.set('X-SW-Cache', 'offline-fallback');
+            return new Response(cached.body, {
+                status: cached.status,
+                statusText: cached.statusText,
+                headers
+            });
+        }
+        // Sin cache y sin red
+        return new Response(
+            JSON.stringify({ error: 'Sin conexión. Los datos se mostrarán cuando vuelvas a conectarte.', offline: true }),
+            { status: 503, headers: { 'Content-Type': 'application/json', 'X-SW-Cache': 'offline' } }
+        );
     }
-
-    // Sin cache: esperar a la red
-    const networkResponse = await networkPromise;
-    if (networkResponse) return networkResponse;
-
-    // Sin cache y sin red: respuesta de error offline
-    return new Response(
-        JSON.stringify({ error: 'Sin conexión. Los datos se mostrarán cuando vuelvas a conectarte.', offline: true }),
-        { status: 503, headers: { 'Content-Type': 'application/json', 'X-SW-Cache': 'offline' } }
-    );
 }
 
 /**
