@@ -1773,6 +1773,14 @@ body {
     display: block;
 }
 
+.paciente-compartido-badge {
+    display: block;
+    font-size: 0.78rem;
+    color: #667eea;
+    font-weight: 600;
+    margin-top: 2px;
+}
+
 .patient-name-free {
     color: white;
     font-weight: 600;

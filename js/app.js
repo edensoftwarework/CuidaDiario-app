@@ -2268,34 +2268,64 @@ async function loadPacienteSelector() {
                 </button>
             `;
         } else {
-            // Usuario Free: auto-seleccionar primer paciente para que paciente_id se asigne correctamente
-            const paciente = pacientes[0] || null;
-            if (paciente) {
-                // Siempre actualizar currentPacienteId con el paciente real del usuario free.
-                // No usar guarda "if (!currentPacienteId)" porque podría quedar con un valor
-                // desactualizado si el paciente fue editado o la sesión se restauró parcialmente.
-                Storage.currentPacienteId = paciente.id;
-                localStorage.setItem('cuidadiario_selected_paciente', String(paciente.id));
+            // Usuario Free
+            const hasShared = pacientes.some(p => p.es_compartido);
+            if (hasShared) {
+                // Free con pacientes compartidos: mostrar selector completo para poder navegar
+                if (!Storage.currentPacienteId) {
+                    const saved = localStorage.getItem('cuidadiario_selected_paciente');
+                    if (saved && pacientes.find(p => String(p.id) === saved)) {
+                        Storage.currentPacienteId = parseInt(saved);
+                    } else {
+                        const firstOwn = pacientes.find(p => !p.es_compartido) || pacientes[0];
+                        if (firstOwn) {
+                            Storage.currentPacienteId = firstOwn.id;
+                            localStorage.setItem('cuidadiario_selected_paciente', String(firstOwn.id));
+                        }
+                    }
+                }
+                const currentId = Storage.currentPacienteId;
+                const options = pacientes.map(p =>
+                    `<option value="${p.id}" ${String(p.id) === String(currentId) ? 'selected' : ''}>${p.nombre}${p.relacion ? ` (${p.relacion})` : ''}${p.es_compartido ? ' &#128101;' : ''}</option>`
+                ).join('');
                 contentDiv.innerHTML = `
                     <div class="patient-selector-left">
-                        <span class="patient-selector-label">&#128100; Paciente:</span>
-                        <span class="patient-name-free">${paciente.nombre}${paciente.relacion ? ` <span class="paciente-relacion-inline">(${paciente.relacion})</span>` : ''}</span>
-                        <button class="btn-edit-patient-free" onclick="openGestionPacientesModal()" title="Editar nombre del paciente">&#9998;</button>
+                        <span class="patient-selector-label">&#128100; Viendo:</span>
+                        <select id="pacienteSelector" onchange="selectPaciente(this.value)" class="patient-dropdown">
+                            ${options}
+                        </select>
                     </div>
-                    <button class="btn-manage-patients btn-add-patient-locked" onclick="showPremiumModal()">
-                        &#128274; Agregar otro paciente
+                    <button class="btn-manage-patients" onclick="openGestionPacientesModal()">
+                        &#9881;&#65039; Ver Pacientes
                     </button>
                 `;
             } else {
-                contentDiv.innerHTML = `
-                    <div class="patient-selector-left">
-                        <span class="patient-selector-label">&#128100; Paciente:</span>
-                        <span class="patient-name-unset">Sin nombre asignado</span>
-                    </div>
-                    <button class="btn-manage-patients btn-name-patient-cta" onclick="openGestionPacientesModal()">
-                        &#128393; Nombrar a mi paciente
-                    </button>
-                `;
+                // Usuario Free sin compartidos: comportamiento original
+                const paciente = pacientes[0] || null;
+                if (paciente) {
+                    Storage.currentPacienteId = paciente.id;
+                    localStorage.setItem('cuidadiario_selected_paciente', String(paciente.id));
+                    contentDiv.innerHTML = `
+                        <div class="patient-selector-left">
+                            <span class="patient-selector-label">&#128100; Paciente:</span>
+                            <span class="patient-name-free">${paciente.nombre}${paciente.relacion ? ` <span class="paciente-relacion-inline">(${paciente.relacion})</span>` : ''}</span>
+                            <button class="btn-edit-patient-free" onclick="openGestionPacientesModal()" title="Editar nombre del paciente">&#9998;</button>
+                        </div>
+                        <button class="btn-manage-patients btn-add-patient-locked" onclick="showPremiumModal()">
+                            &#128274; Agregar otro paciente
+                        </button>
+                    `;
+                } else {
+                    contentDiv.innerHTML = `
+                        <div class="patient-selector-left">
+                            <span class="patient-selector-label">&#128100; Paciente:</span>
+                            <span class="patient-name-unset">Sin nombre asignado</span>
+                        </div>
+                        <button class="btn-manage-patients btn-name-patient-cta" onclick="openGestionPacientesModal()">
+                            &#128393; Nombrar a mi paciente
+                        </button>
+                    `;
+                }
             }
         }
     } catch (err) {
@@ -2351,12 +2381,13 @@ async function loadPacientesList() {
                             <strong>${p.nombre}</strong>
                             ${p.relacion ? `<span class="paciente-relacion">${p.relacion}</span>` : ''}
                             ${p.fecha_nacimiento ? `<span class="paciente-fecha">${formatDate(p.fecha_nacimiento)}</span>` : ''}
+                            ${p.es_compartido ? `<span class="paciente-compartido-badge">&#128101; Co-cuidador &mdash; ${p.compartido_por || 'otro usuario'}</span>` : ''}
                         </div>
                     </div>
                     <div class="item-actions">
-                        <button class="btn-icon" onclick="editPaciente(${p.id})" title="Editar">&#9999;&#65039;</button>
-                        ${isPremium ? `<button class="btn-icon" onclick="openSharePanel(${p.id}, '${p.nombre.replace(/'/g, "\\'")}')" title="Co-cuidadores">&#128101;</button>` : ''}
-                        ${isPremium ? `<button class="btn-icon" onclick="deletePaciente(${p.id})" title="Eliminar">&#128465;&#65039;</button>` : ''}
+                        ${!p.es_compartido ? `<button class="btn-icon" onclick="editPaciente(${p.id})" title="Editar">&#9999;&#65039;</button>` : ''}
+                        ${isPremium && !p.es_compartido ? `<button class="btn-icon" onclick="openSharePanel(${p.id}, '${p.nombre.replace(/'/g, "\\'")}')" title="Co-cuidadores">&#128101;</button>` : ''}
+                        ${isPremium && !p.es_compartido ? `<button class="btn-icon" onclick="deletePaciente(${p.id})" title="Eliminar">&#128465;&#65039;</button>` : ''}
                     </div>
                 </div>
             `).join('') + '</div>';
@@ -2417,7 +2448,12 @@ function closePacienteForm() {
 async function editPaciente(id) {
     const pacientes = await Storage.getPacientes();
     const paciente = pacientes.find(p => p.id === id);
-    if (paciente) openPacienteForm(paciente);
+    if (!paciente) return;
+    if (paciente.es_compartido) {
+        showToast('No podés editar pacientes compartidos por otro usuario.', 'warning');
+        return;
+    }
+    openPacienteForm(paciente);
 }
 
 async function deletePaciente(id) {
