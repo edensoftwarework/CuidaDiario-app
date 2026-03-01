@@ -14,6 +14,12 @@ async function initApp() {
     // Recargar estado premium desde el backend (captura cancelaciones via webhook)
     await API.refreshUser();
 
+    // Si el usuario ya es premium al abrir la app y todavía no se mostró el modal de bienvenida
+    // (ej: re-adquirió desde MP directamente sin pasar por el botón de CuidaDiario)
+    // Se muestra el modal luego de que la UI cargue completamente.
+    const _userOnInit = API.getUser();
+    const _shouldShowWelcome = _userOnInit && _userOnInit.premium && !localStorage.getItem('cuidadiario_premium_welcomed');
+
     // Verificar en background si la suscripción MP fue cancelada
     // (garantiza que el estado sea correcto en cada apertura de la app)
     _syncMPCancellation();
@@ -33,6 +39,9 @@ async function initApp() {
     // Cargar datos iniciales
     await loadDashboard();
     loadAllSections();
+
+    // Mostrar bienvenida premium si se detectó re-suscripción al abrir la app
+    if (_shouldShowWelcome) setTimeout(showPremiumWelcomeModal, 1200);
     
     // Mostrar banner de bienvenida si es la primera vez
     showWelcomeBannerIfNeeded();
@@ -112,6 +121,7 @@ async function checkMercadoPagoReturn() {
                 updatePremiumStatus();
                 await loadPacienteSelector();
                 await loadDashboard();
+                localStorage.removeItem('cuidadiario_premium_welcomed');
                 showPremiumWelcomeModal();
                 return;
             }
@@ -178,10 +188,13 @@ async function _syncMPActiveSubscription() {
             API.setUser(user);
             // Refrescar desde backend por si el DB ya fue corregido también
             await API.refreshUser();
+            // Limpiar clave de bienvenida para que el modal aparezca
+            localStorage.removeItem('cuidadiario_premium_welcomed');
             updatePremiumStatus();
             await loadPacienteSelector();
             await loadDashboard();
             showToast('✅ Suscripción Premium verificada y restaurada automáticamente.', 'success', 7000);
+            setTimeout(showPremiumWelcomeModal, 800);
         }
     } catch { /* sin conexión: ignorar */ }
 }
@@ -1976,21 +1989,64 @@ function showPremiumWelcomeModal() {
     modal.id = 'premiumWelcomeModal';
     modal.className = 'modal active';
     modal.innerHTML = `
-        <div class="modal-content" style="max-width:480px;text-align:center;">
+        <div class="modal-content" style="max-width:500px;text-align:center;">
             <div style="font-size:3rem;margin-bottom:8px;">&#127881;</div>
-            <h2 style="color:#5a3e00;margin:0 0 6px;font-size:1.4rem;">&#161;Bienvenido a Premium!</h2>
-            <p style="color:#777;font-size:0.93rem;margin-bottom:18px;">Ahora tenés acceso a todas las funciones avanzadas de CuidaDiario.</p>
-            <div style="background:#fffbf0;border:1px solid #ffe08a;border-radius:12px;padding:16px 18px;text-align:left;margin-bottom:20px;">
-                <div style="font-weight:700;color:#5a3e00;margin-bottom:12px;font-size:0.95rem;">&#10024; Tus beneficios activos:</div>
-                <ul style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:10px;">
-                    <li style="font-size:0.9rem;">&#128101; <strong>Co-cuidadores</strong> — invitá familiares a ver los datos<br>
-                        <span style="font-size:0.8rem;color:#999;">Gestión de Pacientes → botón &#128101;</span></li>
-                    <li style="font-size:0.9rem;">&#128202; <strong>Reportes avanzados</strong> — exportá historial en PDF<br>
-                        <span style="font-size:0.8rem;color:#999;">Sección &quot;Reportes&quot; en el menú</span></li>
-                    <li style="font-size:0.9rem;">&#128197; <strong>Google Calendar</strong> — sincronizá citas y tareas<br>
-                        <span style="font-size:0.8rem;color:#999;">En cada cita y tarea → botón &#128197; Google Cal</span></li>
-                    <li style="font-size:0.9rem;">&#128138; <strong>Sin límites</strong> — medicamentos, citas, tareas y síntomas ilimitados</li>
-                    <li style="font-size:0.9rem;">&#128100; <strong>Múltiples pacientes</strong> — gestioná toda tu familia desde una cuenta</li>
+            <h2 style="color:#5a3e00;margin:0 0 4px;font-size:1.45rem;">&#161;Bienvenido a Premium!</h2>
+            <p style="color:#888;font-size:0.9rem;margin-bottom:18px;">Ahora tenés acceso completo a todas las funciones de CuidaDiario.</p>
+            <div style="background:#fffbf0;border:1px solid #ffe08a;border-radius:12px;padding:18px 20px;text-align:left;margin-bottom:20px;">
+                <div style="font-weight:700;color:#5a3e00;margin-bottom:14px;font-size:0.95rem;">&#10024; Tus beneficios activos:</div>
+                <ul style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:13px;">
+
+                    <li style="display:flex;gap:10px;align-items:flex-start;">
+                        <span style="font-size:1.3rem;line-height:1;">&#128101;</span>
+                        <div>
+                            <strong style="font-size:0.93rem;">Múltiples pacientes</strong>
+                            <div style="font-size:0.82rem;color:#666;margin-top:2px;">Gestioná a toda tu familia desde una sola cuenta. Cambiá de paciente con el selector en la parte superior.</div>
+                        </div>
+                    </li>
+
+                    <li style="display:flex;gap:10px;align-items:flex-start;">
+                        <span style="font-size:1.3rem;line-height:1;">&#9854;&#65039;</span>
+                        <div>
+                            <strong style="font-size:0.93rem;">Medicamentos, citas, tareas y contactos ilimitados</strong>
+                            <div style="font-size:0.82rem;color:#666;margin-top:2px;">Sin restricciones de cantidad en ninguna sección. Agregá todo lo que necesités.</div>
+                        </div>
+                    </li>
+
+                    <li style="display:flex;gap:10px;align-items:flex-start;">
+                        <span style="font-size:1.3rem;line-height:1;">&#128100;</span>
+                        <div>
+                            <strong style="font-size:0.93rem;">Co-cuidadores</strong>
+                            <div style="font-size:0.82rem;color:#666;margin-top:2px;">Invitá a un familiar o cuidador externo a ver los datos de un paciente. El invitado tiene acceso de solo lectura: puede consultar medicamentos, citas y tareas, pero no puede modificar nada. Vos sos siempre el administrador.</div>
+                            <div style="font-size:0.78rem;color:#aaa;margin-top:3px;">&#128100; Gestión de Pacientes &rarr; botón Invitar Co-cuidador</div>
+                        </div>
+                    </li>
+
+                    <li style="display:flex;gap:10px;align-items:flex-start;">
+                        <span style="font-size:1.3rem;line-height:1;">&#129658;</span>
+                        <div>
+                            <strong style="font-size:0.93rem;">Síntomas y signos vitales</strong>
+                            <div style="font-size:0.82rem;color:#666;margin-top:2px;">Registrá tensión arterial, glucosa, temperatura, peso y más. Seguimiento completo del estado de salud.</div>
+                        </div>
+                    </li>
+
+                    <li style="display:flex;gap:10px;align-items:flex-start;">
+                        <span style="font-size:1.3rem;line-height:1;">&#128197;</span>
+                        <div>
+                            <strong style="font-size:0.93rem;">Google Calendar</strong>
+                            <div style="font-size:0.82rem;color:#666;margin-top:2px;">Sincronizá citas y tareas directamente con tu Google Calendar con un clic.</div>
+                        </div>
+                    </li>
+
+                    <li style="display:flex;gap:10px;align-items:flex-start;">
+                        <span style="font-size:1.3rem;line-height:1;">&#128202;</span>
+                        <div>
+                            <strong style="font-size:0.93rem;">Reportes avanzados</strong>
+                            <div style="font-size:0.82rem;color:#666;margin-top:2px;">Exportá el historial completo en PDF para compartir con médicos o guardar como respaldo.</div>
+                            <div style="font-size:0.78rem;color:#aaa;margin-top:3px;">Sección &quot;Reportes&quot; en el menú</div>
+                        </div>
+                    </li>
+
                 </ul>
             </div>
             <button class="btn-primary" onclick="document.getElementById('premiumWelcomeModal').remove()"
