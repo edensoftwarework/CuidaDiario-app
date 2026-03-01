@@ -444,6 +444,16 @@ async function isViewingSharedPatient() {
     }
 }
 
+// Muestra un toast de solo lectura y retorna true si el paciente es compartido.
+// Usar como guard al inicio de cualquier función de escritura.
+async function blockIfSharedPatient() {
+    if (await isViewingSharedPatient()) {
+        showToast('\uD83D\uDC41\uFE0F Solo tenés permisos de lectura sobre este paciente.', 'info');
+        return true;
+    }
+    return false;
+}
+
 // ========== MEDICAMENTOS ==========
 let editingMedicamentoId = null;
 
@@ -579,6 +589,7 @@ function formatFrecuenciaMed(med) {
 
 async function openMedicamentoModal() {
     if (!requirePaciente()) return;
+    if (await blockIfSharedPatient()) return;
     const limits = await Storage.checkLimits();
     if (!limits.premium && limits.medicamentos.exceeded) {
         showPremiumModal();
@@ -900,8 +911,9 @@ function formatTipoCita(tipo) {
     return map[tipo] || tipo;
 }
 
-function openCitaModal() {
+async function openCitaModal() {
     if (!requirePaciente()) return;
+    if (await blockIfSharedPatient()) return;
     editingCitaId = null;
     document.getElementById('citaModalTitle').textContent = 'Agregar Cita';
     document.getElementById('citaForm').reset();
@@ -1149,8 +1161,9 @@ function switchSintomaTab(tab) {
     }
 }
 
-function openSintomaModal() {
+async function openSintomaModal() {
     if (!requirePaciente()) return;
+    if (await blockIfSharedPatient()) return;
     document.getElementById('sintomaForm').reset();
     document.getElementById('sintomaFecha').value = getCurrentDateTime();
     document.getElementById('sintomaModal').classList.add('active');
@@ -1191,8 +1204,9 @@ async function deleteSintoma(id) {
 // Signo vital modal
 let currentSignoTipo = null;
 
-function registrarSigno(tipo) {
+async function registrarSigno(tipo) {
     if (!requirePaciente()) return;
+    if (await blockIfSharedPatient()) return;
     currentSignoTipo = tipo;
     document.getElementById('signoTipo').value = tipo;
     document.getElementById('signoModalTitle').textContent = `Registrar ${formatSignoTipo(tipo)}`;
@@ -1550,6 +1564,7 @@ async function filterTareas(filter) {
 
 async function openTareaModal() {
     if (!requirePaciente()) return;
+    if (await blockIfSharedPatient()) return;
     const limits = await Storage.checkLimits();
     if (!limits.premium && limits.tareas.exceeded) {
         showPremiumModal();
@@ -1772,6 +1787,7 @@ async function switchContactoTab(tab) {
 
 async function openContactoModal() {
     if (!requirePaciente()) return;
+    if (await blockIfSharedPatient()) return;
     const limits = await Storage.checkLimits();
     if (!limits.premium && limits.contactos.exceeded) {
         showPremiumModal();
