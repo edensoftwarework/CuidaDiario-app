@@ -18,6 +18,10 @@ async function initApp() {
     // (garantiza que el estado sea correcto en cada apertura de la app)
     _syncMPCancellation();
 
+    // Restaurar premium si el DB quedó en false pero MP confirma suscripción activa
+    // (cubre el bug donde webhooks tardíos o cancelaciones de prueba dejan premium=false incorrecto)
+    _syncMPActiveSubscription();
+
     // Inicializar estado de la app
     updatePremiumStatus();
     setupNavigation();
@@ -153,6 +157,33 @@ async function _syncMPCancellation() {
     } catch { /* sin conexión: ignorar */ }
     // Repetir cada 30 minutos mientras la página esté abierta
     setTimeout(_syncMPCancellation, 30 * 60 * 1000);
+}
+
+// Verifica si un usuario no-premium tiene en realidad una suscripción ACTIVA en MP.
+// Cubre el caso donde el DB quedó en premium=false incorrectamente (webhook tardío/duplicado/pruebas).
+async function _syncMPActiveSubscription() {
+    if (!API.isAuthenticated()) return;
+    const user = API.getUser();
+    if (!user || user.premium) return; // ya es premium, no hace falta restaurar
+    try {
+        const token = API.getToken();
+        const res = await fetch(`${API.BASE_URL}/api/verify-subscription`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        // Solo restaurar si MP confirma explícitamente estado activo/autorizado
+        if (data.premium === true && ['authorized', 'active'].includes(data.status)) {
+            user.premium = true;
+            API.setUser(user);
+            // Refrescar desde backend por si el DB ya fue corregido también
+            await API.refreshUser();
+            updatePremiumStatus();
+            await loadPacienteSelector();
+            await loadDashboard();
+            showToast('✅ Suscripción Premium verificada y restaurada automáticamente.', 'success', 7000);
+        }
+    } catch { /* sin conexión: ignorar */ }
 }
 
 // ========== NAVEGADOR DE SECCIONES (flechas) ==========
@@ -706,6 +737,7 @@ async function saveMedicamento(event) {
 }
 
 async function registrarTomaMedicamento(id) {
+    if (await blockIfSharedPatient()) return;
     const medicamentos = await Storage.getMedicamentos();
     const medicamento = medicamentos.find(m => String(m.id) === String(id));
     if (!medicamento) return;
@@ -1390,8 +1422,8 @@ async function loadTareas(filter = 'todas') {
                 </div>
                 <div class="item-actions">
                     ${limits.premium ? `<button class="btn-icon btn-gcal" onclick="addTareaToGoogleCalendar('${encodeURIComponent(tarea.titulo)}','${tarea.fecha}','${tarea.hora || ''}','${encodeURIComponent(tarea.descripcion || '')}')" title="Agregar a Google Calendar">📅 Google Cal</button>` : ''}
-                    <button class="btn-icon" onclick="toggleTareaCompletada('${tarea.id}')" title="${tarea.completada ? 'Marcar pendiente' : 'Completar'}">
-                        ${tarea.completada ? '↩️' : '✓'}
+                    <button class="btn-icon ${tarea.completada ? 'btn-reabrir-tarea' : 'btn-completar-tarea'}" onclick="toggleTareaCompletada('${tarea.id}')" title="${tarea.completada ? 'Marcar pendiente' : 'Marcar completada'}">
+                        ${tarea.completada ? '↩️ Reabrir' : '✓ Completar'}
                     </button>
                     <button class="btn-icon" onclick="editTarea('${tarea.id}')" title="Editar">✏️</button>
                     <button class="btn-icon" onclick="deleteTarea('${tarea.id}')" title="Eliminar">🗑️</button>
@@ -1401,6 +1433,11 @@ async function loadTareas(filter = 'todas') {
                 <div class="item-detail">
                     <span class="item-badge badge-${tarea.completada ? 'completed' : 'active'}">${formatCategoriaTarea(tarea.categoria)}</span>
                     ${tarea.completada ? '<span class="item-badge badge-completed">Completada</span>' : ''}
+                </div>
+                <div class="item-detail">
+                    <span class="item-badge ${tarea.recordatorio ? 'badge-active' : 'badge-pending'}">
+                        ${tarea.recordatorio ? '🔔 Recordatorio activado' : '🔕 Sin recordatorio'}
+                    </span>
                 </div>
                 <div class="item-detail">
                     <span class="detail-icon">🔄</span>
@@ -2233,7 +2270,7 @@ async function openDashboardModal(type) {
         const patientTag = (item) => {
             if (!pMap) return '';
             const nombre = pMap[String(item.paciente_id || '')] || 'Sin paciente';
-            return `<span style="display:inline-block;background:var(--primary-light,#e3f0fb);color:var(--primary,#2196F3);border-radius:12px;padding:1px 9px;font-size:0.72rem;margin-bottom:4px;">👤 ${nombre}</span><br>`;
+            return `<span style="display:inline-block;background:#00897b;color:#fff;border-radius:12px;padding:2px 10px;font-size:0.72rem;font-weight:600;margin-bottom:5px;">👤 ${nombre}</span><br>`;
         };
 
         if (type === 'medicamentos') {

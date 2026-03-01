@@ -323,23 +323,30 @@ const Notifications = {
             });
         });
 
-        // Citas de hoy
-        const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+        // Citas próximas (próximas 24 horas)
+        const next24h = new Date(now.getTime() + 24 * 60 * 60000);
         const citas = await Storage.getCitas();
-        const citasHoy = citas.filter(c => (c.fecha || '').substring(0, 10) === today);
+        const citasProximas = citas.filter(c => {
+            const fechaPart = (c.fecha || '').substring(0, 10);
+            if (!fechaPart) return false;
+            const hora = (c.hora || '23:59').substring(0, 5);
+            const citaTime = new Date(`${fechaPart}T${hora}`);
+            return !isNaN(citaTime) && citaTime > now && citaTime <= next24h;
+        });
         
-        citasHoy.forEach(cita => {
+        citasProximas.forEach(cita => {
             const hora = (cita.hora || '23:59').substring(0, 5);
-            const citaTime = new Date(`${cita.fecha}T${hora}`);
-            if (citaTime > now) {
-                alerts.push({
-                    type: 'urgent',
-                    icon: '📅',
-                    title: 'Cita médica hoy',
-                    message: `${cita.titulo} a las ${hora}`,
-                    time: hora
-                });
-            }
+            const citaTime = new Date(`${(cita.fecha || '').substring(0,10)}T${hora}`);
+            // Citas en las próximas 3 horas: urgente (rojo). Resto del día: aviso (naranja)
+            const horasRestantes = (citaTime - now) / 3600000;
+            const urgencyType = horasRestantes <= 3 ? 'urgent' : 'warning';
+            alerts.push({
+                type: urgencyType,
+                icon: '📅',
+                title: horasRestantes <= 3 ? 'Cita médica próxima' : 'Cita médica hoy',
+                message: `${cita.titulo} a las ${hora}`,
+                time: hora
+            });
         });
 
         // Tareas pendientes de hoy — una tarjeta por tarea

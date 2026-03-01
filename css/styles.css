@@ -476,11 +476,12 @@ body {
 
 .upcoming-patient-badge {
     display: inline-block;
-    background: var(--primary-light, #e3f0fb);
-    color: var(--primary, #2196F3);
+    background: #00897b;
+    color: #fff;
     border-radius: 12px;
-    padding: 1px 9px;
+    padding: 2px 10px;
     font-size: 0.72rem;
+    font-weight: 600;
     margin-bottom: 4px;
 }
 
@@ -561,6 +562,40 @@ body {
 }
 .btn-registrar-toma:hover {
     background: var(--primary-dark);
+    transform: scale(1.05);
+}
+
+/* Botón Completar Tarea — verde */
+.btn-completar-tarea {
+    background: #43a047;
+    color: #fff;
+    font-size: 0.78rem;
+    font-weight: 700;
+    padding: 5px 10px;
+    border-radius: 20px;
+    opacity: 1;
+    white-space: nowrap;
+    letter-spacing: 0.3px;
+}
+.btn-completar-tarea:hover {
+    background: #2e7d32;
+    transform: scale(1.05);
+}
+
+/* Botón Reabrir Tarea — gris neutro */
+.btn-reabrir-tarea {
+    background: #757575;
+    color: #fff;
+    font-size: 0.78rem;
+    font-weight: 700;
+    padding: 5px 10px;
+    border-radius: 20px;
+    opacity: 1;
+    white-space: nowrap;
+    letter-spacing: 0.3px;
+}
+.btn-reabrir-tarea:hover {
+    background: #424242;
     transform: scale(1.05);
 }
 
