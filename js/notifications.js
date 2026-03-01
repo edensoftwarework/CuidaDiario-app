@@ -350,6 +350,7 @@ const Notifications = {
         });
 
         // Tareas pendientes de hoy — una tarjeta por tarea
+        const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
         const todasTareas = await Storage.getTareas();
         const tareasPendientes = todasTareas.filter(t =>
             !t.completada && (t.fecha || '').substring(0, 10) === today

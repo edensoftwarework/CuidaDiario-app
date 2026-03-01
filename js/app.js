@@ -122,7 +122,7 @@ async function checkMercadoPagoReturn() {
                 await loadPacienteSelector();
                 await loadDashboard();
                 localStorage.removeItem('cuidadiario_premium_welcomed');
-                showPremiumWelcomeModal();
+                showPremiumWelcomeModal(true);
                 return;
             }
         } catch (e) { /* continuar reintentando */ }
@@ -194,7 +194,7 @@ async function _syncMPActiveSubscription() {
             await loadPacienteSelector();
             await loadDashboard();
             showToast('✅ Suscripción Premium verificada y restaurada automáticamente.', 'success', 7000);
-            setTimeout(showPremiumWelcomeModal, 800);
+            setTimeout(() => showPremiumWelcomeModal(true), 800);
         }
     } catch { /* sin conexión: ignorar */ }
 }
@@ -1496,8 +1496,11 @@ function addCitaToGoogleCalendar(encodedTitulo, fecha, hora, encodedLugar, encod
     const titulo = decodeURIComponent(encodedTitulo);
     const lugar  = decodeURIComponent(encodedLugar);
     const notas  = decodeURIComponent(encodedNotas);
+    // Normalizar: fecha puede llegar como ISO completo desde la BD
+    fecha = (fecha || '').substring(0, 10);
+    hora  = (hora  || '').substring(0, 5);
     let startDt, endDt;
-    if (hora && hora.length >= 5) {
+    if (hora && hora.length === 5) {
         const [h, m] = hora.split(':').map(Number);
         // La hora está en Argentina (UTC-3): construir fecha con offset explícito
         // y convertir a UTC con Z suffix para que Google Calendar lo interprete siempre correcto
@@ -1521,8 +1524,11 @@ function addCitaToGoogleCalendar(encodedTitulo, fecha, hora, encodedLugar, encod
 function addTareaToGoogleCalendar(encodedTitulo, fecha, hora, encodedDesc) {
     const titulo = decodeURIComponent(encodedTitulo);
     const desc   = decodeURIComponent(encodedDesc);
+    // Normalizar: fecha puede llegar como ISO completo desde la BD
+    fecha = (fecha || '').substring(0, 10);
+    hora  = (hora  || '').substring(0, 5);
     let startDt, endDt;
-    if (hora && hora.length >= 5) {
+    if (hora && hora.length === 5) {
         const [h, m] = hora.split(':').map(Number);
         const startDate = new Date(`${fecha}T${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:00-03:00`);
         const endDate   = new Date(startDate.getTime() + 60 * 60 * 1000);
@@ -1979,10 +1985,11 @@ function confirmarBorrarDatos() {
 }
 
 // ========== PREMIUM ==========
-function showPremiumWelcomeModal() {
+function showPremiumWelcomeModal(force = false) {
     // Se muestra una única vez por suscripción activa.
     // Si el usuario cancela y vuelve a suscribirse, se vuelve a mostrar.
-    if (localStorage.getItem('cuidadiario_premium_welcomed')) return;
+    // Con force=true se muestra siempre (usado desde flujos de pago/restauración).
+    if (!force && localStorage.getItem('cuidadiario_premium_welcomed')) return;
     localStorage.setItem('cuidadiario_premium_welcomed', '1');
 
     const modal = document.createElement('div');
