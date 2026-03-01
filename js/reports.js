@@ -359,7 +359,8 @@ const Reports = {
             );
 
             // BOM (\uFEFF) para que Excel lo abra con tildes correctas
-            const csv = '\uFEFF' + lines.join('\r\n');
+            // sep=, dice a Excel qué separador usar, independiente de la configuración regional
+            const csv = '\uFEFF' + 'sep=,\r\n' + lines.join('\r\n');
             const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');

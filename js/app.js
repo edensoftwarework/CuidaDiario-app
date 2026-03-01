@@ -118,33 +118,34 @@ async function checkMercadoPagoReturn() {
 }
 
 // Verifica en background si el usuario premium canceló su suscripción en MP.
-// Corre silenciosamente en cada apertura de la app y cada 30 minutos.
+// IMPORTANTE: Solo corre si el usuario YA ES PREMIUM en localStorage.
+// Nunca activa premium — la activación la maneja checkMercadoPagoReturn.
+// Esto evita el bug donde un co-cuidador (no premium) se volvía premium
+// por una anomalía de la API de MP que devolvía suscripciones ajenas.
 async function _syncMPCancellation() {
     if (!API.isAuthenticated()) return;
     const user = API.getUser();
-    if (!user) return;
+    // ← GUARD CRÍTICO: solo verificar si el usuario ya tiene premium en localStorage
+    if (!user || !user.premium) {
+        setTimeout(_syncMPCancellation, 30 * 60 * 1000);
+        return;
+    }
     try {
         const token = API.getToken();
         const res = await fetch(`${API.BASE_URL}/api/verify-subscription`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
-        if (!res.ok) return;
-        const data = await res.json();
-        // Activación: el backend confirmó premium pero localStorage lo tenía como false
-        if (data.premium && !user.premium) {
-            user.premium = true;
-            API.setUser(user);
-            updatePremiumStatus();
-            await loadDashboard();
-            showToast('🎉 ¡Premium activado!', 'success', 5000);
-            showPremiumWelcomeModal();
+        if (!res.ok) {
+            setTimeout(_syncMPCancellation, 30 * 60 * 1000);
+            return;
         }
-        // Cancelación: el backend confirmó que ya no tiene suscripción activa
-        else if (data.premium === false && user.premium &&
+        const data = await res.json();
+        // Solo actuar si el backend confirma que la suscripción fue cancelada/pausada/expirada
+        if (data.premium === false &&
             ['cancelled', 'paused', 'expired'].includes(data.status)) {
             user.premium = false;
             API.setUser(user);
-            localStorage.removeItem('cuidadiario_premium_welcomed'); // permitir re-mostrar si vuelve a suscribirse
+            localStorage.removeItem('cuidadiario_premium_welcomed');
             updatePremiumStatus();
             await loadDashboard();
             showToast('🔔 Tu suscripción Premium fue cancelada o expiró.', 'info', 7000);
@@ -1650,10 +1651,34 @@ async function loadContactos(filter = 'todos') {
     } else {
         warningDiv.style.display = 'none';
     }
+
+    // Mostrar banner de datos bloqueados si bajó de premium y tiene más de 2
+    const lockedBanner = document.getElementById('contactosLockedBanner');
+    if (lockedBanner) {
+        if (!limits.premium && limits.contactos.locked > 0) {
+            lockedBanner.style.display = 'block';
+            lockedBanner.innerHTML = `
+                <span class="locked-icon">🔒</span>
+                Tenés <strong>${limits.contactos.locked}</strong> contacto${limits.contactos.locked > 1 ? 's' : ''} bloqueado${limits.contactos.locked > 1 ? 's' : ''}.
+                <a href="#" onclick="showPremiumModal(); return false;">Volvé a Premium</a> para acceder a todos.
+            `;
+        } else {
+            lockedBanner.style.display = 'none';
+        }
+    }
     
-    let filtered = contactos;
+    // Visibles: free → solo primeros 2; premium → todos
+    const visibles = (!limits.premium && contactos.length > limits.contactos.max)
+        ? contactos.slice(0, limits.contactos.max)
+        : contactos;
+
+    // Los tabs del HTML usan plural ('medicos','familiares'), la BD usa singular ('medico','familiar')
+    const TAB_MAP = { medicos: 'medico', familiares: 'familiar', emergencia: 'emergencia', farmacia: 'farmacia', otro: 'otro' };
+    const dbCategory = TAB_MAP[filter] || filter;
+
+    let filtered = visibles;
     if (filter !== 'todos') {
-        filtered = contactos.filter(c => c.categoria === filter);
+        filtered = visibles.filter(c => c.categoria === dbCategory);
     }
     
     // Ordenar alfabéticamente

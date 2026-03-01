@@ -1221,6 +1221,11 @@ body {
     max-width: 800px;
 }
 
+/* Contenedor principal de la lista de pacientes y panel co-cuidador */
+#pacientesListContainer {
+    padding: 0 25px 20px;
+}
+
 .premium-content {
     padding: 30px;
 }

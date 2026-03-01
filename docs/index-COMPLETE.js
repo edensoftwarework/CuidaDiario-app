@@ -1631,7 +1631,13 @@ app.get('/api/verify-subscription', authMiddleware, async (req, res) => {
             const search = await mpRequest(`/preapproval/search?external_reference=${req.user.id}&status=authorized`);
             if (search.status === 200) {
                 const results = search.body?.results || [];
-                authorized = results.find(p => p.status === 'authorized') || null;
+                // CRÍTICO: verificar que external_reference coincide con el usuario solicitante.
+                // Sin esta verificación, un bug de la API de MP podría retornar suscripciones ajenas
+                // (ej: en entornos de prueba), otorgando premium a co-cuidadores sin suscripción.
+                authorized = results.find(p =>
+                    p.status === 'authorized' &&
+                    parseInt(p.external_reference) === req.user.id
+                ) || null;
             }
         }
 

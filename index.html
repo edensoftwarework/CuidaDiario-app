@@ -336,9 +336,11 @@
 
                 <div class="premium-feature" id="contactosPremiumWarning" style="display: none;">
                     <div class="premium-lock">🔒</div>
-                    <p>La agenda de contactos ampliada está disponible en la versión Premium (máximo 1 contacto en versión gratuita)</p>
+                    <p>La agenda de contactos ampliada está disponible en la versión Premium (máximo 2 contactos en versión gratuita)</p>
                     <button class="btn-premium-small" onclick="showPremiumModal()">Ver Premium</button>
                 </div>
+
+                <div id="contactosLockedBanner" class="locked-data-banner" style="display:none;" onclick="showPremiumModal()"></div>
 
                 <!-- Categorías de contactos -->
                 <div class="tabs">
@@ -846,7 +848,7 @@
                         <h4>🌎 Suscripción mensual</h4>
                         <div class="price">$3.500 ARS<span style="font-size:0.55em;font-weight:400">/mes</span></div>
                         <p class="price-detail">Cancelá cuando quieras</p>
-                        <p style="font-size:0.82em; color:#a8e6cf; background:rgba(168,230,207,0.1); border-radius:8px; padding:8px 10px; margin:10px 0 8px; line-height:1.5;">
+                        <p style="font-size:0.85em; color:#fff; background:rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.25); border-radius:8px; padding:10px 12px; margin:10px 0 8px; line-height:1.5; font-weight:500;">
                             💳 Podés pagar con <strong>tarjeta de crédito o débito</strong> (Visa, Mastercard, etc.) sin necesitar cuenta en MercadoPago.
                         </p>
                         <button class="btn-payment" onclick="procesarPago('mercadopago', 'ARS', 3500)">
