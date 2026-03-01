@@ -429,6 +429,21 @@ async function updateUpcomingActivities() {
     }
 }
 
+// ========== HELPER: CO-CUIDADOR ==========
+// Devuelve true si el paciente actualmente seleccionado fue compartido por otro usuario.
+// En ese caso se omiten los límites free para lectura.
+async function isViewingSharedPatient() {
+    try {
+        const id = Storage.currentPacienteId;
+        if (!id) return false;
+        const pacientes = await Storage.getPacientes();
+        const p = pacientes.find(p => String(p.id) === String(id));
+        return !!(p && p.es_compartido);
+    } catch (e) {
+        return false;
+    }
+}
+
 // ========== MEDICAMENTOS ==========
 let editingMedicamentoId = null;
 
@@ -436,6 +451,7 @@ async function loadMedicamentos() {
     const medicamentos = await Storage.getMedicamentos();
     const container = document.getElementById('medicamentosList');
     const limits = await Storage.checkLimits();
+    if (await isViewingSharedPatient()) limits.premium = true;
     
     // Mostrar warning si alcanzó el límite
     const warning = document.getElementById('medLimitWarning');
@@ -514,7 +530,8 @@ async function loadMedicamentos() {
 }
 
 async function loadHistorialMedicamentos() {
-    const isPremium = Storage.getPremiumStatus();
+    let isPremium = Storage.getPremiumStatus();
+    if (!isPremium && await isViewingSharedPatient()) isPremium = true;
     const LIMIT_FREE = 5;
     const LIMIT_PREMIUM = 50;
 
@@ -695,6 +712,7 @@ let editingCitaId = null;
 
 async function loadCitas() {
     const limits = await Storage.checkLimits();
+    if (await isViewingSharedPatient()) limits.premium = true;
     const warning = document.getElementById('citasLimitWarning');
     if (warning) {
         warning.style.display = (!limits.premium && limits.citas.exceeded) ? 'block' : 'none';
@@ -792,6 +810,7 @@ function selectCalendarDate(dateStr) {
 async function renderCitasList(filter = 'todas') {
     const allCitas = await Storage.getCitas();
     const limits = await Storage.checkLimits();
+    if (await isViewingSharedPatient()) limits.premium = true;
     // Si es free y tiene más del límite, mostrar solo las primeras
     const citas = (!limits.premium && allCitas.length > limits.citas.max)
         ? allCitas.slice(0, limits.citas.max)
@@ -960,7 +979,8 @@ async function saveCita(event) {
 
 // ========== SÍNTOMAS Y SIGNOS VITALES ==========
 async function loadSintomas() {
-    const isPremium = Storage.getPremiumStatus();
+    let isPremium = Storage.getPremiumStatus();
+    if (!isPremium && await isViewingSharedPatient()) isPremium = true;
     const premiumBlock = document.getElementById('sintomasPremiumBlock');
     const content = document.getElementById('sintomasContent');
     const addBtn = document.querySelector('#sintomas .section-header .btn-primary');
@@ -1259,6 +1279,7 @@ async function loadTareas(filter = 'todas') {
     const tareas = await Storage.getTareas();
     const container = document.getElementById('tareasList');
     const limits = await Storage.checkLimits();
+    if (await isViewingSharedPatient()) limits.premium = true;
     
     // Mostrar warning si alcanzó el límite
     const warning = document.getElementById('tareasLimitWarning');
@@ -1643,7 +1664,8 @@ async function loadContactos(filter = 'todos') {
     const contactos = await Storage.getContactos();
     const container = document.getElementById('contactosList');
     const limits = await Storage.checkLimits();
-    const isPremium = Storage.getPremiumStatus();
+    let isPremium = Storage.getPremiumStatus();
+    if (!isPremium && await isViewingSharedPatient()) { limits.premium = true; isPremium = true; }
     
     const warningDiv = document.getElementById('contactosPremiumWarning');
     if (!isPremium && limits.contactos.exceeded) {
