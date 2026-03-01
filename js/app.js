@@ -362,6 +362,9 @@ async function updateUpcomingActivities() {
             return `${DIAS[d.getDay()]} ${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
         }
 
+        // Mapa de pacientes para mostrar a quién corresponde cada actividad
+        const pMapUpcoming = !Storage.currentPacienteId ? await getPacienteNombreMap() : null;
+
         // Agregar citas próximas (próximos 7 días)
         const citas = await Storage.getCitas();
         citas.forEach(cita => {
@@ -378,7 +381,8 @@ async function updateUpcomingActivities() {
                     title: cita.titulo,
                     subtitle: `Cita - ${cita.lugar || 'Sin ubicación'}`,
                     type: 'cita',
-                    date: citaDate
+                    date: citaDate,
+                    pacienteId: String(cita.paciente_id || '')
                 });
             }
         });
@@ -399,7 +403,8 @@ async function updateUpcomingActivities() {
                 title: tarea.titulo,
                 subtitle: `Tarea - ${tarea.categoria || 'General'}`,
                 type: 'tarea',
-                date: new Date(`${tf}T${th}`)
+                date: new Date(`${tf}T${th}`),
+                pacienteId: String(tarea.paciente_id || '')
             });
         });
         
@@ -411,18 +416,21 @@ async function updateUpcomingActivities() {
             return;
         }
         
-        list.innerHTML = activities.map(act => `
+        list.innerHTML = activities.map(act => {
+            const pacienteNombre = pMapUpcoming ? (pMapUpcoming[act.pacienteId] || 'Sin paciente') : null;
+            return `
             <div class="upcoming-item">
                 <div class="upcoming-time">
                     <div class="upcoming-date-label">${act.dateDisplay}</div>
                     <div>${act.time}</div>
                 </div>
                 <div class="upcoming-content">
+                    ${pacienteNombre ? `<span class="upcoming-patient-badge">👤 ${pacienteNombre}</span>` : ''}
                     <h4>${act.title}</h4>
                     <p>${act.subtitle}</p>
                 </div>
-            </div>
-        `).join('');
+            </div>`;
+        }).join('');
     } catch (err) {
         console.error('Error cargando actividades próximas:', err);
         list.innerHTML = '<p class="empty-state">No hay actividades próximas programadas</p>';
@@ -2220,11 +2228,20 @@ async function openDashboardModal(type) {
         const today = `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}-${String(_now.getDate()).padStart(2,'0')}`;
         const thisMonth = today.substring(0, 7);
 
+        // Badge de paciente — solo se muestra cuando se ven todos los pacientes
+        const pMap = !Storage.currentPacienteId ? await getPacienteNombreMap() : null;
+        const patientTag = (item) => {
+            if (!pMap) return '';
+            const nombre = pMap[String(item.paciente_id || '')] || 'Sin paciente';
+            return `<span style="display:inline-block;background:var(--primary-light,#e3f0fb);color:var(--primary,#2196F3);border-radius:12px;padding:1px 9px;font-size:0.72rem;margin-bottom:4px;">👤 ${nombre}</span><br>`;
+        };
+
         if (type === 'medicamentos') {
             const meds = await Storage.getMedicamentos();
             if (!meds.length) { body.innerHTML = '<p class="empty-state">Sin medicamentos registrados</p>'; return; }
             body.innerHTML = meds.map(m => `
                 <div style="padding:10px 0;border-bottom:1px solid var(--border-color);">
+                    ${patientTag(m)}
                     <strong>💊 ${m.nombre}</strong> — <span style="color:var(--text-secondary);">${m.dosis}</span>
                     <br><small style="color:var(--text-secondary);">${formatFrecuenciaMed(m)}</small>
                 </div>`).join('');
@@ -2240,6 +2257,7 @@ async function openDashboardModal(type) {
             if (!proximas.length) { body.innerHTML = '<p class="empty-state">Sin citas esta semana</p>'; return; }
             body.innerHTML = proximas.map(c => `
                 <div style="padding:10px 0;border-bottom:1px solid var(--border-color);">
+                    ${patientTag(c)}
                     <strong>📅 ${c.titulo || c.medico || 'Cita'}</strong>
                     <br><small style="color:var(--text-secondary);">${formatDate(c.fecha)}${c.hora ? ' a las ' + c.hora : ''}${c.lugar ? ' — ' + c.lugar : ''}</small>
                 </div>`).join('');
@@ -2250,6 +2268,7 @@ async function openDashboardModal(type) {
             if (!pendientes.length) { body.innerHTML = '<p class="empty-state">Sin tareas pendientes hoy 🎉</p>'; return; }
             body.innerHTML = pendientes.map(t => `
                 <div style="padding:10px 0;border-bottom:1px solid var(--border-color);">
+                    ${patientTag(t)}
                     <strong>✓ ${t.titulo || t.nombre}</strong>
                     ${t.descripcion ? `<br><small style="color:var(--text-secondary);">${t.descripcion}</small>` : ''}
                 </div>`).join('');
@@ -2258,12 +2277,13 @@ async function openDashboardModal(type) {
             const historial = await Storage.getHistorialMedicamentos();
             const sintomas = await Storage.getSintomas();
             const regMes = [
-                ...historial.filter(h => (h.fecha || '').startsWith(thisMonth)).map(h => ({ tipo: '💊', texto: `${h.medicamento_nombre || h.medicamentoNombre} — ${h.dosis}`, fecha: h.fecha })),
-                ...sintomas.filter(s => (s.fecha || '').startsWith(thisMonth)).map(s => ({ tipo: '🩺', texto: s.descripcion || s.tipo, fecha: s.fecha }))
+                ...historial.filter(h => (h.fecha || '').startsWith(thisMonth)).map(h => ({ tipo: '💊', texto: `${h.medicamento_nombre || h.medicamentoNombre} — ${h.dosis}`, fecha: h.fecha, paciente_id: h.paciente_id })),
+                ...sintomas.filter(s => (s.fecha || '').startsWith(thisMonth)).map(s => ({ tipo: '🩺', texto: s.descripcion || s.tipo, fecha: s.fecha, paciente_id: s.paciente_id }))
             ].sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
             if (!regMes.length) { body.innerHTML = '<p class="empty-state">Sin registros este mes</p>'; return; }
             body.innerHTML = regMes.map(r => `
                 <div style="padding:10px 0;border-bottom:1px solid var(--border-color);">
+                    ${patientTag(r)}
                     <strong>${r.tipo} ${r.texto}</strong>
                     <br><small style="color:var(--text-secondary);">${formatDate(r.fecha)}</small>
                 </div>`).join('');
