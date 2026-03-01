@@ -324,38 +324,40 @@ const Notifications = {
         });
 
         // Citas de hoy
-        const today = now.toISOString().split('T')[0];
+        const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
         const citas = await Storage.getCitas();
-        const citasHoy = citas.filter(c => c.fecha === today);
+        const citasHoy = citas.filter(c => (c.fecha || '').substring(0, 10) === today);
         
         citasHoy.forEach(cita => {
-            const citaTime = new Date(`${cita.fecha}T${cita.hora}`);
+            const hora = (cita.hora || '23:59').substring(0, 5);
+            const citaTime = new Date(`${cita.fecha}T${hora}`);
             if (citaTime > now) {
                 alerts.push({
-                    type: 'warning',
+                    type: 'urgent',
                     icon: '📅',
                     title: 'Cita médica hoy',
-                    message: `${cita.titulo} a las ${cita.hora}`,
-                    time: cita.hora
+                    message: `${cita.titulo} a las ${hora}`,
+                    time: hora
                 });
             }
         });
 
-        // Tareas pendientes de hoy
+        // Tareas pendientes de hoy — una tarjeta por tarea
         const todasTareas = await Storage.getTareas();
-        const tareasPendientes = todasTareas.filter(t => 
-            !t.completada && t.fecha === today
+        const tareasPendientes = todasTareas.filter(t =>
+            !t.completada && (t.fecha || '').substring(0, 10) === today
         );
 
-        if (tareasPendientes.length > 0) {
+        tareasPendientes.forEach(tarea => {
+            const hora = tarea.hora ? tarea.hora.substring(0, 5) : null;
             alerts.push({
-                type: 'info',
+                type: 'urgent',
                 icon: '✓',
-                title: 'Tareas pendientes',
-                message: `Tienes ${tareasPendientes.length} tarea(s) pendiente(s) para hoy`,
-                time: null
+                title: 'Tarea pendiente hoy',
+                message: `${tarea.titulo}${hora ? ` a las ${hora}` : ''}`,
+                time: hora || '23:59'
             });
-        }
+        });
 
         return alerts.sort((a, b) => {
             if (!a.time) return 1;

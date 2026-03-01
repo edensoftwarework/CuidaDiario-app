@@ -454,6 +454,32 @@ async function blockIfSharedPatient() {
     return false;
 }
 
+// ========== HELPERS: AGRUPAR POR PACIENTE ==========
+// Devuelve un mapa { pacienteId -> nombre } con todos los pacientes del usuario.
+async function getPacienteNombreMap() {
+    const pacientes = await Storage.getPacientes();
+    const map = {};
+    pacientes.forEach(p => { map[String(p.id)] = p.nombre; });
+    return map;
+}
+
+// Renderiza items agrupados por paciente cuando pMap es válido (no null).
+// renderFn(item) debe devolver el HTML del item.
+function renderWithPatientGroups(items, renderFn, pMap) {
+    if (!pMap) return items.map(renderFn).join('');
+    const sorted = [...items].sort((a, b) => (a.paciente_id || 0) - (b.paciente_id || 0));
+    let lastPid = null;
+    return sorted.map(item => {
+        const pid = String(item.paciente_id || '');
+        let hdr = '';
+        if (pid !== lastPid) {
+            lastPid = pid;
+            hdr = `<div class="patient-group-header"><span class="patient-group-name">\uD83D\uDC64 ${pMap[pid] || 'Sin paciente asignado'}</span></div>`;
+        }
+        return hdr + renderFn(item);
+    }).join('');
+}
+
 // ========== MEDICAMENTOS ==========
 let editingMedicamentoId = null;
 
@@ -496,7 +522,8 @@ async function loadMedicamentos() {
         ? medicamentos.slice(0, limits.medicamentos.max)
         : medicamentos;
 
-    container.innerHTML = visibles.map(med => `
+    const pMap = !Storage.currentPacienteId ? await getPacienteNombreMap() : null;
+    container.innerHTML = renderWithPatientGroups(visibles, med => `
         <div class="item-card">
             <div class="item-header">
                 <div>
@@ -532,8 +559,7 @@ async function loadMedicamentos() {
                     </span>
                 </div>
             </div>
-        </div>
-    `).join('');
+        </div>`, pMap);
     
     // Cargar historial
     await loadHistorialMedicamentos();
@@ -844,14 +870,14 @@ async function renderCitasList(filter = 'todas') {
         container.innerHTML = '<p class="empty-state">No hay citas programadas</p>';
         return;
     }
-    
-    container.innerHTML = filtered.map(cita => {
+
+    const pMap = !Storage.currentPacienteId ? await getPacienteNombreMap() : null;
+    container.innerHTML = renderWithPatientGroups(filtered, cita => {
         const citaDate = new Date(cita.fecha);
         const isPast = citaDate < now;
         const gcalBtn = limits.premium
             ? `<button class="btn-icon btn-gcal" onclick="addCitaToGoogleCalendar('${encodeURIComponent(cita.titulo)}','${cita.fecha}','${cita.hora || ''}','${encodeURIComponent(cita.lugar || '')}','${encodeURIComponent(cita.notas || '')}')" title="Agregar a Google Calendar">📅 Google Cal</button>`
             : '';
-        
         return `
             <div class="item-card">
                 <div class="item-header">
@@ -890,7 +916,7 @@ async function renderCitasList(filter = 'todas') {
                 </div>
             </div>
         `;
-    }).join('');
+    }, pMap);
 }
 
 async function filterCitas(filter) {
@@ -1346,7 +1372,8 @@ async function loadTareas(filter = 'todas') {
         return;
     }
     
-    container.innerHTML = filtered.map(tarea => `
+    const pMap = !Storage.currentPacienteId ? await getPacienteNombreMap() : null;
+    container.innerHTML = renderWithPatientGroups(filtered, tarea => `
         <div class="item-card">
             <div class="item-header">
                 <div>
@@ -1379,7 +1406,7 @@ async function loadTareas(filter = 'todas') {
                 ` : ''}
             </div>
         </div>
-    `).join('');
+    `, pMap);
 }
 
 function formatCategoriaTarea(categoria) {
@@ -1962,10 +1989,37 @@ function updatePremiumStatus() {
 // Retorna true si puede continuar, false si debe crear un paciente primero.
 function requirePaciente() {
     if (Storage.currentPacienteId) return true;
-    // No hay paciente → mostrar toast y abrir modal de gestión
-    showToast('Primero creá un paciente para poder registrar datos. \u{1F464}', 'warning', 4000);
-    setTimeout(() => openGestionPacientesModal(), 300);
+    // Verificar si hay pacientes: si los hay, es el caso "todos los pacientes" seleccionado
+    Storage.getPacientes().then(pacientes => {
+        const propios = (pacientes || []).filter(p => !p.es_compartido);
+        if (propios.length > 0) {
+            // Premium con "todos" seleccionado → pedir que elija uno
+            openPickPacienteModal();
+        } else {
+            showToast('Primero creá un paciente para poder registrar datos. \u{1F464}', 'warning', 4000);
+            setTimeout(() => openGestionPacientesModal(), 300);
+        }
+    });
     return false;
+}
+
+async function openPickPacienteModal() {
+    const pacientes = (await Storage.getPacientes()).filter(p => !p.es_compartido);
+    const list = document.getElementById('pickPacienteList');
+    list.innerHTML = pacientes.map(p => `
+        <button class="btn-pick-paciente" onclick="pickPacienteAndClose(${p.id}, '${p.nombre.replace(/'/g, "\\'")}')">\u{1F464} ${p.nombre}${p.relacion ? ` <em style="font-weight:400;opacity:.75">(${p.relacion})</em>` : ''}</button>
+    `).join('');
+    document.getElementById('pickPacienteModal').classList.add('active');
+}
+
+async function pickPacienteAndClose(id, nombre) {
+    document.getElementById('pickPacienteModal').classList.remove('active');
+    await selectPaciente(String(id));
+    showToast(`Ahora ves a ${nombre}. Podés agregar el registro.`, 'info', 3500);
+}
+
+function closePickPacienteModal() {
+    document.getElementById('pickPacienteModal').classList.remove('active');
 }
 
 function showPremiumModal() {

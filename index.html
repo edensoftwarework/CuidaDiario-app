@@ -770,6 +770,18 @@
     </div>
 
     <!-- Modal: Gestión de Pacientes -->
+    <!-- Modal selector de paciente para acciones rápidas -->
+    <div id="pickPacienteModal" class="modal">
+        <div class="modal-content" style="max-width:380px;">
+            <div class="modal-header">
+                <h3>&#128100; ¿Para qué paciente?</h3>
+                <button class="modal-close" onclick="closePickPacienteModal()">&times;</button>
+            </div>
+            <p style="color:var(--text-secondary);font-size:0.9rem;margin:0 0 16px;">Estás viendo todos los pacientes. Seleccioná uno para continuar.</p>
+            <div id="pickPacienteList" style="display:flex;flex-direction:column;gap:10px;"></div>
+        </div>
+    </div>
+
     <div id="gestionPacientesModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
