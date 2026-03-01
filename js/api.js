@@ -110,7 +110,8 @@ const API = {
     async refreshUser() {
         try {
             const response = await fetch(`${this.BASE_URL}/api/me`, {
-                headers: this.getHeaders()
+                headers: this.getHeaders(),
+                cache: 'no-store'
             });
             if (!response.ok) return null;
             const data = await response.json();

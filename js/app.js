@@ -112,7 +112,8 @@ async function checkMercadoPagoReturn() {
         try {
             const token = API.getToken();
             const res   = await fetch(`${API.BASE_URL}/api/verify-subscription`, {
-                headers: { 'Authorization': `Bearer ${token}` }
+                headers: { 'Authorization': `Bearer ${token}` },
+                cache: 'no-store'
             });
             const data = await res.json();
             if (data.premium) {
@@ -147,7 +148,8 @@ async function _syncMPCancellation() {
     try {
         const token = API.getToken();
         const res = await fetch(`${API.BASE_URL}/api/verify-subscription`, {
-            headers: { 'Authorization': `Bearer ${token}` }
+            headers: { 'Authorization': `Bearer ${token}` },
+            cache: 'no-store'
         });
         if (!res.ok) {
             setTimeout(_syncMPCancellation, 30 * 60 * 1000);
@@ -178,7 +180,8 @@ async function _syncMPActiveSubscription() {
     try {
         const token = API.getToken();
         const res = await fetch(`${API.BASE_URL}/api/verify-subscription`, {
-            headers: { 'Authorization': `Bearer ${token}` }
+            headers: { 'Authorization': `Bearer ${token}` },
+            cache: 'no-store'
         });
         if (!res.ok) return;
         const data = await res.json();
