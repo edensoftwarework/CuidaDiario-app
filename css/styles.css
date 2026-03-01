@@ -202,10 +202,10 @@ body {
 }
 
 .snav-btn {
-    background: none;
+    background: var(--primary-color);
     border: none;
-    color: var(--primary-color);
-    font-size: 1.15rem;
+    color: #fff;
+    font-size: 1.1rem;
     width: 38px;
     height: 38px;
     border-radius: 50%;
@@ -213,13 +213,20 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background 0.15s;
+    transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
     padding: 0;
     font-family: inherit;
     line-height: 1;
+    box-shadow: 0 2px 8px rgba(76,175,80,0.35);
+    flex-shrink: 0;
 }
-.snav-btn:hover:not(:disabled) { background: rgba(76,175,80,0.1); }
-.snav-btn:disabled { opacity: 0.25; cursor: default; }
+.snav-btn:hover:not(:disabled) {
+    background: var(--primary-dark);
+    transform: scale(1.08);
+    box-shadow: 0 4px 12px rgba(76,175,80,0.45);
+}
+.snav-btn:active:not(:disabled) { transform: scale(0.95); }
+.snav-btn:disabled { background: #ccc; box-shadow: none; opacity: 0.45; cursor: default; }
 
 .snav-label {
     font-size: 0.8rem;
@@ -548,9 +555,20 @@ body {
     transform: scale(1.1);
 }
 
-/* Botón Registrar Toma — más visible y descriptivo */
+/* Highlight animado al navegar desde dashboard */
+@keyframes itemHighlightPulse {
+    0%   { box-shadow: 0 0 0 0 rgba(0,137,123,0.55); background: #e0f2f1; }
+    50%  { box-shadow: 0 0 0 8px rgba(0,137,123,0.12); background: #b2dfdb; }
+    100% { box-shadow: 0 0 0 0 rgba(0,137,123,0); background: transparent; }
+}
+.item-highlight {
+    animation: itemHighlightPulse 0.5s ease 2;
+    border-radius: 12px;
+}
+
+/* Botón Registrar Toma — naranja para indicar ácción pendiente, no verde (que confunde con “ya tomado”) */
 .btn-registrar-toma {
-    background: var(--primary-color);
+    background: #F57C00;
     color: #fff;
     font-size: 0.78rem;
     font-weight: 700;
@@ -561,8 +579,42 @@ body {
     letter-spacing: 0.3px;
 }
 .btn-registrar-toma:hover {
-    background: var(--primary-dark);
+    background: #E65100;
     transform: scale(1.05);
+}
+
+/* Contador de tomas del día */
+.toma-counter {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    flex-wrap: wrap;
+}
+.toma-counter-label {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+.toma-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #4CAF50;
+    display: inline-block;
+    box-shadow: 0 1px 3px rgba(76,175,80,0.4);
+}
+.toma-dot.toma-dot-empty {
+    background: #e0e0e0;
+    box-shadow: none;
+}
+.toma-counter-num {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #4CAF50;
+    background: #e8f5e9;
+    border-radius: 10px;
+    padding: 1px 7px;
 }
 
 /* Botón Completar Tarea — verde */

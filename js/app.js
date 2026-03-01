@@ -11,6 +11,10 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 async function initApp() {
+    // Guardar estado premium ANTES de refrescar desde backend
+    // (necesario para detectar transición no-premium → premium en esta sesión)
+    const _premiumBefore = !!(API.getUser()?.premium);
+
     // Recargar estado premium desde el backend (captura cancelaciones via webhook)
     await API.refreshUser();
 
@@ -18,7 +22,15 @@ async function initApp() {
     // (ej: re-adquirió desde MP directamente sin pasar por el botón de CuidaDiario)
     // Se muestra el modal luego de que la UI cargue completamente.
     const _userOnInit = API.getUser();
-    const _shouldShowWelcome = _userOnInit && _userOnInit.premium && !localStorage.getItem('cuidadiario_premium_welcomed');
+    const _isPremiumNow = !!(_userOnInit && _userOnInit.premium);
+
+    // Detectar re-suscripción: no era premium antes → ahora sí
+    // En ese caso limpiar la clave para que el modal aparezca siempre
+    if (!_premiumBefore && _isPremiumNow) {
+        localStorage.removeItem('cuidadiario_premium_welcomed');
+    }
+
+    const _shouldShowWelcome = _isPremiumNow && !localStorage.getItem('cuidadiario_premium_welcomed');
 
     // Verificar en background si la suscripción MP fue cancelada
     // (garantiza que el estado sea correcto en cada apertura de la app)
@@ -578,43 +590,78 @@ async function loadMedicamentos() {
         : medicamentos;
 
     const pMap = !Storage.currentPacienteId ? await getPacienteNombreMap() : null;
-    container.innerHTML = renderWithPatientGroups(visibles, med => `
-        <div class="item-card">
+
+    // Contador de tomas del día actual por medicamento
+    const todayStr = (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; })();
+    const historialHoy = await Storage.getHistorialMedicamentos();
+    const tomasHoy = {}; // medId -> count
+    historialHoy.forEach(h => {
+        if ((h.fecha || '').startsWith(todayStr)) {
+            const mid = String(h.medicamento_id || h.medicamentoId || '');
+            tomasHoy[mid] = (tomasHoy[mid] || 0) + 1;
+        }
+    });
+
+    container.innerHTML = renderWithPatientGroups(visibles, med => {
+        const count = tomasHoy[String(med.id)] || 0;
+        // Generar dots visuales: freqüencia sugerida en tomas/día
+        const freqDots = { 'cada-4h': 6, 'cada-6h': 4, 'cada-8h': 3, 'cada-12h': 2, 'diaria': 1, 'custom': null };
+        const maxDots = freqDots[med.frecuencia] || null;
+        let counterHtml = '';
+        if (maxDots !== null) {
+            const dots = Array.from({ length: maxDots }, (_, i) =>
+                `<span class="toma-dot${i < count ? '' : ' toma-dot-empty'}" title="Toma ${i+1}"></span>`
+            ).join('');
+            counterHtml = `<div class="toma-counter">
+                <span class="toma-counter-label">Hoy:</span>
+                ${dots}
+                <span class="toma-counter-num">${count}/${maxDots}</span>
+            </div>`;
+        } else if (count > 0) {
+            counterHtml = `<div class="toma-counter">
+                <span class="toma-counter-label">Hoy:</span>
+                <span class="toma-counter-num">${count} toma${count > 1 ? 's' : ''}</span>
+            </div>`;
+        }
+        return `
+        <div class="item-card" id="med-${med.id}">
             <div class="item-header">
                 <div>
                     <h3 class="item-title">${med.nombre}</h3>
                     <p class="item-subtitle">${med.dosis}</p>
                 </div>
                 <div class="item-actions">
-                    <button class="btn-icon btn-registrar-toma" onclick="registrarTomaMedicamento('${med.id}')" title="Registrar toma">✓ Toma</button>
-                    <button class="btn-icon" onclick="editMedicamento('${med.id}')" title="Editar">✏️</button>
-                    <button class="btn-icon" onclick="deleteMedicamento('${med.id}')" title="Eliminar">🗑️</button>
+                    <button class="btn-icon btn-registrar-toma" onclick="registrarTomaMedicamento('${med.id}')" title="Registrar toma">&#128138; Registrar toma</button>
+                    <button class="btn-icon" onclick="editMedicamento('${med.id}')" title="Editar">&#9998;&#65039;</button>
+                    <button class="btn-icon" onclick="deleteMedicamento('${med.id}')" title="Eliminar">&#128465;&#65039;</button>
                 </div>
             </div>
             <div class="item-details">
                 <div class="item-detail">
-                    <span class="detail-icon">⏰</span>
+                    <span class="detail-icon">&#9200;</span>
                     <span>${formatFrecuenciaMed(med)}</span>
                 </div>
                 ${(med.hora_inicio || med.horaInicio) ? `
                 <div class="item-detail">
-                    <span class="detail-icon">🕐</span>
+                    <span class="detail-icon">&#128336;</span>
                     <span>Inicio: ${med.hora_inicio || med.horaInicio}</span>
                 </div>
                 ` : ''}
                 ${med.notas ? `
                 <div class="item-detail">
-                    <span class="detail-icon">📝</span>
+                    <span class="detail-icon">&#128221;</span>
                     <span>${med.notas}</span>
                 </div>
                 ` : ''}
                 <div class="item-detail">
                     <span class="item-badge ${med.recordatorio ? 'badge-active' : 'badge-pending'}">
-                        ${med.recordatorio ? '🔔 Recordatorio activado' : '🔕 Sin recordatorio'}
+                        ${med.recordatorio ? '&#128276; Recordatorio activado' : '&#128277; Sin recordatorio'}
                     </span>
                 </div>
+                ${counterHtml ? `<div class="item-detail">${counterHtml}</div>` : ''}
             </div>
-        </div>`, pMap);
+        </div>`;
+    }, pMap);
     
     // Cargar historial
     await loadHistorialMedicamentos();
@@ -642,7 +689,7 @@ async function loadHistorialMedicamentos() {
                 <strong>${h.medicamento_nombre || h.medicamentoNombre || '—'}</strong> - ${h.dosis || ''}
                 ${h.notas ? `<br><small>${h.notas}</small>` : ''}
             </div>
-            <div class="historial-fecha">${formatDate(h.fecha)}</div>
+            <div class="historial-fecha">${formatDateTime(h.fecha)}</div>
             <button class="btn-icon btn-historial-delete" onclick="deleteHistorialEntry(${h.id})" title="Eliminar registro">🗑️</button>
         </div>
     `).join('');
@@ -935,7 +982,7 @@ async function renderCitasList(filter = 'todas') {
             ? `<button class="btn-icon btn-gcal" onclick="addCitaToGoogleCalendar('${encodeURIComponent(cita.titulo)}','${cita.fecha}','${cita.hora || ''}','${encodeURIComponent(cita.lugar || '')}','${encodeURIComponent(cita.notas || '')}')" title="Agregar a Google Calendar">📅 Google Cal</button>`
             : '';
         return `
-            <div class="item-card">
+            <div class="item-card" id="cita-${cita.id}">
                 <div class="item-header">
                     <div>
                         <h3 class="item-title">${cita.titulo}</h3>
@@ -1430,10 +1477,7 @@ async function loadTareas(filter = 'todas') {
     
     const pMap = !Storage.currentPacienteId ? await getPacienteNombreMap() : null;
     container.innerHTML = renderWithPatientGroups(filtered, tarea => `
-        <div class="item-card">
-            <div class="item-header">
-                <div>
-                    <h3 class="item-title">${tarea.titulo}</h3>
+        <div class="item-card" id="tarea-${tarea.id}">
                     <p class="item-subtitle">${formatDate(tarea.fecha)}${tarea.hora ? ` - ${tarea.hora}` : ''}</p>
                 </div>
                 <div class="item-actions">
@@ -1991,8 +2035,16 @@ function confirmarBorrarDatos() {
 function showPremiumWelcomeModal(force = false) {
     // Se muestra una única vez por suscripción activa.
     // Si el usuario cancela y vuelve a suscribirse, se vuelve a mostrar.
-    // Con force=true se muestra siempre (usado desde flujos de pago/restauración).
+    // Con force=true se muestra SIEMPRE (usado desde flujos de pago/restauración).
     if (!force && localStorage.getItem('cuidadiario_premium_welcomed')) return;
+
+    // Si ya hay un modal previo en el DOM, eliminarlo primero
+    const existing = document.getElementById('premiumWelcomeModal');
+    if (existing) existing.remove();
+
+    // Al mostrar (especialmente con force), limpiar primero la clave para asegurar
+    // que siempre se setee desde cero (cubre el caso de re-suscripción)
+    localStorage.removeItem('cuidadiario_premium_welcomed');
     localStorage.setItem('cuidadiario_premium_welcomed', '1');
 
     const modal = document.createElement('div');
@@ -2339,14 +2391,33 @@ async function openDashboardModal(type) {
             return `<span style="display:inline-block;background:#00897b;color:#fff;border-radius:12px;padding:2px 10px;font-size:0.72rem;font-weight:600;margin-bottom:5px;">👤 ${nombre}</span><br>`;
         };
 
+        // Helper: cierra el modal y navega a sección + hace scroll al item
+        const goToItem = (section, itemId) => {
+            modal.classList.remove('active');
+            navigateToSection(section).then(() => {
+                if (!itemId) return;
+                setTimeout(() => {
+                    const el = document.getElementById(itemId);
+                    if (el) {
+                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        el.classList.add('item-highlight');
+                        setTimeout(() => el.classList.remove('item-highlight'), 2000);
+                    }
+                }, 300);
+            });
+        };
+
         if (type === 'medicamentos') {
             const meds = await Storage.getMedicamentos();
             if (!meds.length) { body.innerHTML = '<p class="empty-state">Sin medicamentos registrados</p>'; return; }
             body.innerHTML = meds.map(m => `
-                <div style="padding:10px 0;border-bottom:1px solid var(--border-color);">
+                <div onclick="(function(){document.getElementById('dashboardDetailModal').classList.remove('active');navigateToSection('medicamentos').then(()=>{setTimeout(()=>{const el=document.getElementById('med-${m.id}');if(el){el.scrollIntoView({behavior:'smooth',block:'center'});el.classList.add('item-highlight');setTimeout(()=>el.classList.remove('item-highlight'),2000);}},300);});})()"
+                    style="padding:10px 0;border-bottom:1px solid var(--border-color);cursor:pointer;transition:background 0.15s;border-radius:6px;padding-left:6px;"
+                    onmouseover="this.style.background='#f5f5f5'" onmouseout="this.style.background=''">
                     ${patientTag(m)}
                     <strong>💊 ${m.nombre}</strong> — <span style="color:var(--text-secondary);">${m.dosis}</span>
                     <br><small style="color:var(--text-secondary);">${formatFrecuenciaMed(m)}</small>
+                    <small style="color:#00897b;font-weight:600;margin-left:6px;">→ Ver detalle</small>
                 </div>`).join('');
 
         } else if (type === 'citas') {
@@ -2359,10 +2430,13 @@ async function openDashboardModal(type) {
             });
             if (!proximas.length) { body.innerHTML = '<p class="empty-state">Sin citas esta semana</p>'; return; }
             body.innerHTML = proximas.map(c => `
-                <div style="padding:10px 0;border-bottom:1px solid var(--border-color);">
+                <div onclick="(function(){document.getElementById('dashboardDetailModal').classList.remove('active');navigateToSection('citas').then(()=>{setTimeout(()=>{const el=document.getElementById('cita-${c.id}');if(el){el.scrollIntoView({behavior:'smooth',block:'center'});el.classList.add('item-highlight');setTimeout(()=>el.classList.remove('item-highlight'),2000);}},300);});})()"
+                    style="padding:10px 0;border-bottom:1px solid var(--border-color);cursor:pointer;transition:background 0.15s;border-radius:6px;padding-left:6px;"
+                    onmouseover="this.style.background='#f5f5f5'" onmouseout="this.style.background=''">
                     ${patientTag(c)}
                     <strong>📅 ${c.titulo || c.medico || 'Cita'}</strong>
                     <br><small style="color:var(--text-secondary);">${formatDate(c.fecha)}${c.hora ? ' a las ' + c.hora : ''}${c.lugar ? ' — ' + c.lugar : ''}</small>
+                    <small style="color:#00897b;font-weight:600;margin-left:6px;">→ Ver detalle</small>
                 </div>`).join('');
 
         } else if (type === 'tareas') {
@@ -2370,10 +2444,13 @@ async function openDashboardModal(type) {
             const pendientes = tareas.filter(t => !t.completada && (t.fecha || '').substring(0, 10) === today);
             if (!pendientes.length) { body.innerHTML = '<p class="empty-state">Sin tareas pendientes hoy 🎉</p>'; return; }
             body.innerHTML = pendientes.map(t => `
-                <div style="padding:10px 0;border-bottom:1px solid var(--border-color);">
+                <div onclick="(function(){document.getElementById('dashboardDetailModal').classList.remove('active');navigateToSection('tareas').then(()=>{setTimeout(()=>{const el=document.getElementById('tarea-${t.id}');if(el){el.scrollIntoView({behavior:'smooth',block:'center'});el.classList.add('item-highlight');setTimeout(()=>el.classList.remove('item-highlight'),2000);}},300);});})()"
+                    style="padding:10px 0;border-bottom:1px solid var(--border-color);cursor:pointer;transition:background 0.15s;border-radius:6px;padding-left:6px;"
+                    onmouseover="this.style.background='#f5f5f5'" onmouseout="this.style.background=''">
                     ${patientTag(t)}
                     <strong>✓ ${t.titulo || t.nombre}</strong>
                     ${t.descripcion ? `<br><small style="color:var(--text-secondary);">${t.descripcion}</small>` : ''}
+                    <small style="color:#00897b;font-weight:600;margin-left:6px;">→ Ver detalle</small>
                 </div>`).join('');
 
         } else if (type === 'registros') {
