@@ -2656,6 +2656,12 @@ function setupEventListeners() {
         history.pushState(null, '', location.href);
         window.addEventListener('popstate', () => {
             history.pushState(null, '', location.href);
+            // Si hay un modal abierto, cerrarlo en lugar de mostrar el modal de salida
+            const openModal = document.querySelector('.modal.active');
+            if (openModal) {
+                openModal.classList.remove('active');
+                return;
+            }
             document.getElementById('exitConfirmModal').classList.add('active');
         });
     }
@@ -2677,6 +2683,16 @@ function setupEventListeners() {
             const btn  = document.getElementById('settingsBtn');
             if (menu) menu.style.display = 'none';
             if (btn)  btn.classList.remove('open');
+        }
+    });
+
+    // Cerrar modal activo con tecla Escape (desktop/notebook)
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            const openModal = document.querySelector('.modal.active');
+            if (openModal) {
+                openModal.classList.remove('active');
+            }
         }
     });
 }
