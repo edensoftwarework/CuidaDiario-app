@@ -607,6 +607,8 @@ async function loadMedicamentos() {
             const fechaLocal = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
             if (fechaLocal === todayStr) {
                 const mid = String(h.medicamento_id || h.medicamentoId || '');
+                // Si el medicamento fue editado hoy, ignorar las tomas anteriores a la edición
+                if (localStorage.getItem(`med_reset_${mid}`) === todayStr) return;
                 tomasHoy[mid] = (tomasHoy[mid] || 0) + 1;
             }
         }
@@ -744,6 +746,13 @@ async function openMedicamentoModal() {
     document.getElementById('medicamentoForm').reset();
     document.getElementById('medId').value = '';
     document.getElementById('customHorariosGroup').style.display = 'none';
+    // Restaurar visibilidad de hora_fin (por si quedó oculto de edición anterior con 'diaria')
+    const hfgNew = document.getElementById('medHoraFinGroup');
+    if (hfgNew) hfgNew.style.display = '';
+    const ilNew = document.querySelector('label[for="medHoraInicio"]');
+    if (ilNew) ilNew.textContent = 'Desde (primera toma)';
+    const vhNew = document.querySelector('.ventana-horaria-header span');
+    if (vhNew) vhNew.innerHTML = '⏰ Ventana del día <span style="font-weight:400;opacity:0.7;">(opcional)</span>';
     document.getElementById('medicamentoModal').classList.add('active');
 }
 
@@ -772,7 +781,21 @@ async function editMedicamento(id) {
         document.getElementById('customHorariosGroup').style.display = 'block';
         document.getElementById('medHorariosCustom').value = medicamento.horarios_custom || medicamento.horariosCustom || '';
     }
-    
+
+    // Mostrar/ocultar hora_fin según frecuencia (diaria solo necesita hora_inicio)
+    const hfgEdit = document.getElementById('medHoraFinGroup');
+    const ilEdit  = document.querySelector('label[for="medHoraInicio"]');
+    const vhEdit  = document.querySelector('.ventana-horaria-header span');
+    if (medicamento.frecuencia === 'diaria') {
+        if (hfgEdit) hfgEdit.style.display = 'none';
+        if (ilEdit)  ilEdit.textContent  = 'Horario de la toma';
+        if (vhEdit)  vhEdit.innerHTML    = '⏰ Horario de recordatorio';
+    } else {
+        if (hfgEdit) hfgEdit.style.display = '';
+        if (ilEdit)  ilEdit.textContent  = 'Desde (primera toma)';
+        if (vhEdit)  vhEdit.innerHTML    = '⏰ Ventana del día <span style="font-weight:400;opacity:0.7;">(opcional)</span>';
+    }
+
     document.getElementById('medicamentoModal').classList.add('active');
 }
 
@@ -806,6 +829,9 @@ async function saveMedicamento(event) {
     
     if (id) {
         await Storage.updateMedicamento(id, medicamento);
+        // Resetear contador de tomas de hoy al editar la ventana/frecuencia
+        const todayReset = new Date().toISOString().split('T')[0];
+        localStorage.setItem(`med_reset_${id}`, todayReset);
     } else {
         await Storage.addMedicamento(medicamento);
     }
@@ -837,6 +863,22 @@ async function registrarTomaMedicamento(id) {
     await loadDashboard();
 }
 
+async function registrarCumplimientoTarea(id) {
+    if (await blockIfSharedPatient()) return;
+    const tareas = await Storage.getTareas();
+    const tarea = tareas.find(t => String(t.id) === String(id));
+    if (!tarea) return;
+    if (tarea.completada) {
+        showToast('Esta tarea ya está completada', 'info');
+        return;
+    }
+    if (!confirm(`✅ ¿Registrar cumplimiento de "${tarea.titulo}"?`)) return;
+    await Storage.updateTarea(id, { completada: true });
+    showToast(`✓ Cumplimiento registrado: ${tarea.titulo}`, 'success');
+    await loadTareas();
+    await loadDashboard();
+}
+
 /**
  * Calcula los horarios de toma de un medicamento para un día,
  * respetando la ventana de vigilia (hora_inicio → hora_fin).
@@ -860,15 +902,24 @@ function calcDosasDelDia(med) {
     const [hI, mI] = horaInicioStr.split(':').map(Number);
     const [hF, mF] = horaFinStr.split(':').map(Number);
     const inicioMin = (hI || 0) * 60 + (mI || 0);
-    const finMin    = (hF || 22) * 60 + (mF || 0);
+    let finMin      = (hF || 22) * 60 + (mF || 0);
+
+    // 23:59 = fin de día → extender a 1440 para incluir toma de medianoche (00:00)
+    if (finMin === 1439) finMin = 1440;
+    // Detectar ventana que cruza medianoche (ej. 23:39 → 06:00)
+    const crossesMidnight = inicioMin > finMin;
+    const windowMinutes = crossesMidnight
+        ? (1440 - inicioMin) + finMin + 1
+        : finMin - inicioMin + 1;
 
     const horarios = [];
-    let t = inicioMin;
-    while (t <= finMin) {
+    let elapsed = 0;
+    while (elapsed < windowMinutes) {
+        const t = (inicioMin + elapsed) % 1440;
         const h = Math.floor(t / 60);
         const m = t % 60;
-        if (h < 24) horarios.push(`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`);
-        t += intervaloHoras * 60;
+        horarios.push(`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`);
+        elapsed += intervaloHoras * 60;
     }
     if (horarios.length === 0) horarios.push(horaInicioStr);
     return horarios;
@@ -890,11 +941,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const frecSelect = document.getElementById('medFrecuencia');
     if (frecSelect) {
         frecSelect.addEventListener('change', (e) => {
-            const customGroup = document.getElementById('customHorariosGroup');
+            const customGroup  = document.getElementById('customHorariosGroup');
+            const hfgChange    = document.getElementById('medHoraFinGroup');
+            const ilChange     = document.querySelector('label[for="medHoraInicio"]');
+            const vhChange     = document.querySelector('.ventana-horaria-header span');
             if (e.target.value === 'custom') {
                 customGroup.style.display = 'block';
             } else {
                 customGroup.style.display = 'none';
+            }
+            if (e.target.value === 'diaria') {
+                if (hfgChange) hfgChange.style.display = 'none';
+                if (ilChange)  ilChange.textContent  = 'Horario de la toma';
+                if (vhChange)  vhChange.innerHTML    = '⏰ Horario de recordatorio';
+            } else {
+                if (hfgChange) hfgChange.style.display = '';
+                if (ilChange)  ilChange.textContent  = 'Desde (primera toma)';
+                if (vhChange)  vhChange.innerHTML    = '⏰ Ventana del día <span style="font-weight:400;opacity:0.7;">(opcional)</span>';
             }
         });
     }
@@ -1532,9 +1595,13 @@ async function loadTareas(filter = 'todas') {
     const pMap = !Storage.currentPacienteId ? await getPacienteNombreMap() : null;
     container.innerHTML = renderWithPatientGroups(filtered, tarea => `
         <div class="item-card" id="tarea-${tarea.id}">
+            <div class="item-header">
+                <div>
+                    <h3 class="item-title">${tarea.titulo}</h3>
                     <p class="item-subtitle">${formatDate(tarea.fecha)}${tarea.hora ? ` - ${tarea.hora}` : ''}</p>
                 </div>
                 <div class="item-actions">
+                    <button class="btn-icon btn-registrar-toma" onclick="registrarCumplimientoTarea('${tarea.id}')" title="Registrar cumplimiento">✅ Registrar</button>
                     ${limits.premium ? `<button class="btn-icon btn-gcal" onclick="addTareaToGoogleCalendar('${encodeURIComponent(tarea.titulo)}','${tarea.fecha}','${tarea.hora || ''}','${encodeURIComponent(tarea.descripcion || '')}')" title="Agregar a Google Calendar">📅 Google Cal</button>` : ''}
                     <button class="btn-icon ${tarea.completada ? 'btn-reabrir-tarea' : 'btn-completar-tarea'}" onclick="toggleTareaCompletada('${tarea.id}')" title="${tarea.completada ? 'Marcar pendiente' : 'Marcar completada'}">
                         ${tarea.completada ? '↩️ Reabrir' : '✓ Completar'}
@@ -2857,6 +2924,7 @@ window.editMedicamento = editMedicamento;
 window.deleteMedicamento = deleteMedicamento;
 window.saveMedicamento = saveMedicamento;
 window.registrarTomaMedicamento = registrarTomaMedicamento;
+window.registrarCumplimientoTarea = registrarCumplimientoTarea;
 window.openCitaModal = openCitaModal;
 window.closeCitaModal = closeCitaModal;
 window.editCita = editCita;

@@ -191,15 +191,24 @@ const Notifications = {
         const [hI, mI] = horaInicioStr.split(':').map(Number);
         const [hF, mF] = horaFinStr.split(':').map(Number);
         const inicioMin = (hI || 0) * 60 + (mI || 0);
-        const finMin    = (hF || 22) * 60 + (mF || 0);
+        let finMin      = (hF || 22) * 60 + (mF || 0);
+
+        // 23:59 = fin de día → extender a 1440 para incluir toma de medianoche (00:00)
+        if (finMin === 1439) finMin = 1440;
+        // Detectar ventana que cruza medianoche (ej. 23:39 → 06:00)
+        const crossesMidnight = inicioMin > finMin;
+        const windowMinutes = crossesMidnight
+            ? (1440 - inicioMin) + finMin + 1
+            : finMin - inicioMin + 1;
 
         const horarios = [];
-        let t = inicioMin;
-        while (t <= finMin) {
+        let elapsed = 0;
+        while (elapsed < windowMinutes) {
+            const t = (inicioMin + elapsed) % 1440;
             const h = Math.floor(t / 60);
             const m = t % 60;
-            if (h < 24) horarios.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
-            t += intervalo * 60;
+            horarios.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+            elapsed += intervalo * 60;
         }
         // Asegurar al menos un horario aunque inicio >= fin
         if (horarios.length === 0) horarios.push(horaInicioStr.substring(0, 5));
