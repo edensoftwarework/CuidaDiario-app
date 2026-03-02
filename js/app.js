@@ -110,6 +110,11 @@ async function checkMercadoPagoReturn() {
     if (!mpPending && !mpActivated) return; // No venía de pagar
 
     localStorage.removeItem('cuidadiario_mp_pending');
+    // CRÍTICO: limpiar la clave de bienvenida SIEMPRE que detectamos un flujo de pago.
+    // Esto cubre el caso donde el usuario canceló su suscripción sin que la app estuviera
+    // abierta (por lo que _syncMPCancellation nunca corrió y la clave quedó seteada).
+    // Al volver del checkout de MP, garantizamos que el modal SIEMPRE aparece en este dispositivo.
+    localStorage.removeItem('cuidadiario_premium_welcomed');
     // Limpiar query params de la URL sin recargar
     window.history.replaceState({}, '', window.location.pathname);
 
@@ -604,18 +609,23 @@ async function loadMedicamentos() {
 
     container.innerHTML = renderWithPatientGroups(visibles, med => {
         const count = tomasHoy[String(med.id)] || 0;
-        // Generar dots visuales: freqüencia sugerida en tomas/día
-        const freqDots = { 'cada-4h': 6, 'cada-6h': 4, 'cada-8h': 3, 'cada-12h': 2, 'diaria': 1, 'custom': null };
-        const maxDots = freqDots[med.frecuencia] || null;
+        // Calcular horarios reales del día según hora_inicio, hora_fin y frecuencia
+        const horariosDia = calcDosasDelDia(med);
+        const maxDots = med.frecuencia === 'custom' ? null : (horariosDia.length > 0 ? horariosDia.length : null);
         let counterHtml = '';
-        if (maxDots !== null) {
+        if (maxDots !== null && maxDots > 0) {
             const dots = Array.from({ length: maxDots }, (_, i) =>
-                `<span class="toma-dot${i < count ? '' : ' toma-dot-empty'}" title="Toma ${i+1}"></span>`
+                `<span class="toma-dot${i < count ? '' : ' toma-dot-empty'}" title="${horariosDia[i] || 'Toma ' + (i+1)}"></span>`
             ).join('');
             counterHtml = `<div class="toma-counter">
                 <span class="toma-counter-label">Hoy:</span>
                 ${dots}
                 <span class="toma-counter-num">${count}/${maxDots}</span>
+            </div>`;
+        } else if (med.frecuencia === 'custom' && count > 0) {
+            counterHtml = `<div class="toma-counter">
+                <span class="toma-counter-label">Hoy:</span>
+                <span class="toma-counter-num">${count} toma${count > 1 ? 's' : ''}</span>
             </div>`;
         } else if (count > 0) {
             counterHtml = `<div class="toma-counter">
@@ -644,7 +654,7 @@ async function loadMedicamentos() {
                 ${(med.hora_inicio || med.horaInicio) ? `
                 <div class="item-detail">
                     <span class="detail-icon">&#128336;</span>
-                    <span>Inicio: ${med.hora_inicio || med.horaInicio}</span>
+                    <span>Ventana: ${med.hora_inicio || med.horaInicio}${(med.hora_fin || med.horaFin) ? ' – ' + (med.hora_fin || med.horaFin) : ' – 22:00'}</span>
                 </div>
                 ` : ''}
                 ${med.notas ? `
@@ -749,6 +759,7 @@ async function editMedicamento(id) {
     document.getElementById('medDosis').value = medicamento.dosis;
     document.getElementById('medFrecuencia').value = medicamento.frecuencia;
     document.getElementById('medHoraInicio').value = medicamento.hora_inicio || medicamento.horaInicio || '';
+    document.getElementById('medHoraFin').value    = medicamento.hora_fin    || medicamento.horaFin    || '';
     document.getElementById('medNotas').value = medicamento.notas || '';
     document.getElementById('medRecordatorio').checked = medicamento.recordatorio || false;
     
@@ -777,6 +788,7 @@ async function saveMedicamento(event) {
         dosis: document.getElementById('medDosis').value,
         frecuencia: document.getElementById('medFrecuencia').value,
         horaInicio: document.getElementById('medHoraInicio').value,
+        horaFin:    document.getElementById('medHoraFin').value || null,
         notas: document.getElementById('medNotas').value,
         recordatorio: document.getElementById('medRecordatorio').checked
     };
@@ -818,6 +830,43 @@ async function registrarTomaMedicamento(id) {
     showToast(`✓ Toma registrada: ${medicamento.nombre} — ${medicamento.dosis}`, 'success');
     await loadMedicamentos();
     await loadDashboard();
+}
+
+/**
+ * Calcula los horarios de toma de un medicamento para un día,
+ * respetando la ventana de vigilia (hora_inicio → hora_fin).
+ * - hora_inicio por defecto: 08:00
+ * - hora_fin   por defecto: 22:00
+ * @param {Object} med
+ * @returns {string[]} Array de "HH:MM"
+ */
+function calcDosasDelDia(med) {
+    if (med.frecuencia === 'custom') {
+        const custom = med.horariosCustom || med.horarios_custom;
+        if (custom) return custom.split(',').map(h => h.trim()).filter(Boolean);
+        return [];
+    }
+    const intervaloMap = { 'cada-4h': 4, 'cada-6h': 6, 'cada-8h': 8, 'cada-12h': 12, 'diaria': 24 };
+    const intervaloHoras = intervaloMap[med.frecuencia];
+    if (!intervaloHoras) return [];
+
+    const horaInicioStr = ((med.hora_inicio || med.horaInicio || '08:00') + '').substring(0, 5);
+    const horaFinStr    = ((med.hora_fin    || med.horaFin    || '22:00') + '').substring(0, 5);
+    const [hI, mI] = horaInicioStr.split(':').map(Number);
+    const [hF, mF] = horaFinStr.split(':').map(Number);
+    const inicioMin = (hI || 0) * 60 + (mI || 0);
+    const finMin    = (hF || 22) * 60 + (mF || 0);
+
+    const horarios = [];
+    let t = inicioMin;
+    while (t <= finMin) {
+        const h = Math.floor(t / 60);
+        const m = t % 60;
+        if (h < 24) horarios.push(`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`);
+        t += intervaloHoras * 60;
+    }
+    if (horarios.length === 0) horarios.push(horaInicioStr);
+    return horarios;
 }
 
 async function deleteHistorialEntry(id) {

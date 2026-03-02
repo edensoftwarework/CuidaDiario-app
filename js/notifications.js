@@ -163,8 +163,8 @@ const Notifications = {
 
     /**
      * Obtener horarios de un medicamento
-     * Si no tiene hora_inicio, usa horarios por defecto según frecuencia
-     * (comenzando a las 08:00 y sin pasar de las 22:00)
+     * Respeta la ventana de vigilia: hora_inicio (def. 08:00) hasta hora_fin (def. 22:00).
+     * Ejemplo: inicio=12:00, cada-6h, fin=22:00 → [12:00, 18:00] (solo 2 dosis, no 3)
      * @param {Object} medicamento
      * @returns {Array} - Array de horarios en formato HH:MM
      */
@@ -173,6 +173,7 @@ const Notifications = {
         if (medicamento.frecuencia === 'custom') {
             const custom = medicamento.horariosCustom || medicamento.horarios_custom;
             if (custom) return custom.split(',').map(h => h.trim()).filter(Boolean);
+            return [];
         }
 
         const frecuencias = {
@@ -184,23 +185,24 @@ const Notifications = {
         };
         const intervalo = frecuencias[medicamento.frecuencia] || 24;
 
-        // Si tiene hora_inicio la usamos; si no, arrancamos a las 08:00
-        const horaInicioStr = medicamento.hora_inicio || medicamento.horaInicio || '08:00';
-        const [hStr, mStr] = horaInicioStr.split(':');
-        const horaInicio = parseInt(hStr) || 8;
-        const minInicio  = parseInt(mStr) || 0;
+        const horaInicioStr = ((medicamento.hora_inicio || medicamento.horaInicio || '08:00') + '').substring(0, 5);
+        const horaFinStr    = ((medicamento.hora_fin    || medicamento.horaFin    || '22:00') + '').substring(0, 5);
+
+        const [hI, mI] = horaInicioStr.split(':').map(Number);
+        const [hF, mF] = horaFinStr.split(':').map(Number);
+        const inicioMin = (hI || 0) * 60 + (mI || 0);
+        const finMin    = (hF || 22) * 60 + (mF || 0);
 
         const horarios = [];
-        let h = horaInicio;
-        // Generar horarios hasta las 22:00 (10 PM) para no molestar de noche
-        while (h < 22) {
-            horarios.push(`${String(h).padStart(2, '0')}:${String(minInicio).padStart(2, '0')}`);
-            h += intervalo;
+        let t = inicioMin;
+        while (t <= finMin) {
+            const h = Math.floor(t / 60);
+            const m = t % 60;
+            if (h < 24) horarios.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+            t += intervalo * 60;
         }
-        // Asegurar al menos un horario aunque el inicio sea >= 22
-        if (horarios.length === 0) {
-            horarios.push(`${String(horaInicio).padStart(2, '0')}:${String(minInicio).padStart(2, '0')}`);
-        }
+        // Asegurar al menos un horario aunque inicio >= fin
+        if (horarios.length === 0) horarios.push(horaInicioStr.substring(0, 5));
         return horarios;
     },
 
