@@ -291,16 +291,18 @@ body {
    =========================================== */
 .section {
     display: none;
+    pointer-events: none;
 }
 
 .section.active {
     display: block;
-    animation: fadeIn 0.3s ease;
+    pointer-events: auto;
+    animation: fadeIn 0.25s ease;
 }
 
 @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
+    from { opacity: 0; }
+    to   { opacity: 1; }
 }
 
 .section-header {
@@ -1244,7 +1246,7 @@ body {
     width: 100%;
     height: 100%;
     background: rgba(0,0,0,0.5);
-    z-index: 2000;
+    z-index: 3000;
     overflow-y: auto;
     padding: 20px;
 }
@@ -1468,6 +1470,34 @@ body {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 15px;
+}
+
+/* Caja visual para la ventana horaria del medicamento */
+.ventana-horaria-box {
+    background: var(--bg-soft);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 18px;
+}
+.ventana-horaria-header {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 6px;
+}
+.ventana-horaria-desc {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin: 0 0 12px;
+    line-height: 1.45;
+}
+/* Time inputs en form-row: ancho natural para que no se estiren demás en desktop */
+.ventana-horaria-box input[type="time"] {
+    width: auto;
+    min-width: 120px;
 }
 
 .intensity-labels {

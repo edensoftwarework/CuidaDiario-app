@@ -601,9 +601,14 @@ async function loadMedicamentos() {
     const historialHoy = await Storage.getHistorialMedicamentos();
     const tomasHoy = {}; // medId -> count
     historialHoy.forEach(h => {
-        if ((h.fecha || '').startsWith(todayStr)) {
-            const mid = String(h.medicamento_id || h.medicamentoId || '');
-            tomasHoy[mid] = (tomasHoy[mid] || 0) + 1;
+        if (h.fecha) {
+            // Convertir a fecha local para evitar desfase de zona horaria (ej. UTC vs Argentina)
+            const d = new Date(h.fecha);
+            const fechaLocal = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+            if (fechaLocal === todayStr) {
+                const mid = String(h.medicamento_id || h.medicamentoId || '');
+                tomasHoy[mid] = (tomasHoy[mid] || 0) + 1;
+            }
         }
     });
 

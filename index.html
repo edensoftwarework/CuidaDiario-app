@@ -474,29 +474,35 @@
                     <label for="medDosis">Dosis *</label>
                     <input type="text" id="medDosis" placeholder="Ej: 500mg, 1 comprimido" required>
                 </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="medFrecuencia">Frecuencia *</label>
-                        <select id="medFrecuencia" required>
-                            <option value="">Selecciona...</option>
-                            <option value="cada-4h">Cada 4 horas</option>
-                            <option value="cada-6h">Cada 6 horas</option>
-                            <option value="cada-8h">Cada 8 horas</option>
-                            <option value="cada-12h">Cada 12 horas</option>
-                            <option value="diaria">Diaria</option>
-                            <option value="custom">Horarios personalizados</option>
-                        </select>
+                <div class="form-group">
+                    <label for="medFrecuencia">Frecuencia *</label>
+                    <select id="medFrecuencia" required>
+                        <option value="">Selecciona...</option>
+                        <option value="cada-4h">Cada 4 horas</option>
+                        <option value="cada-6h">Cada 6 horas</option>
+                        <option value="cada-8h">Cada 8 horas</option>
+                        <option value="cada-12h">Cada 12 horas</option>
+                        <option value="diaria">Diaria</option>
+                        <option value="custom">Horarios personalizados</option>
+                    </select>
+                </div>
+                <!-- Ventana horaria del día: entre qué horas se programan las tomas -->
+                <div class="ventana-horaria-box">
+                    <div class="ventana-horaria-header">
+                        <span>⏰ Ventana del día <span style="font-weight:400;opacity:0.7;">(opcional)</span></span>
                     </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="medHoraInicio">Hora de inicio</label>
-                        <input type="time" id="medHoraInicio" placeholder="08:00">
-                        <small style="color:#888;font-size:0.75rem;">Primera toma del día (def. 08:00)</small>
-                    </div>
-                    <div class="form-group">
-                        <label for="medHoraFin">Hora límite del día</label>
-                        <input type="time" id="medHoraFin" placeholder="22:00">
-                        <small style="color:#888;font-size:0.75rem;">Última toma posible (def. 22:00)</small>
+                    <p class="ventana-horaria-desc">Define entre qué horas se programan los recordatorios. Fuera de este rango no habrá avisos.</p>
+                    <div class="form-row">
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label for="medHoraInicio">Desde (primera toma)</label>
+                            <input type="time" id="medHoraInicio" placeholder="08:00">
+                            <small style="color:#888;font-size:0.75rem;">Por defecto: 08:00</small>
+                        </div>
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label for="medHoraFin">Hasta (última toma posible)</label>
+                            <input type="time" id="medHoraFin" placeholder="22:00">
+                            <small style="color:#888;font-size:0.75rem;">Por defecto: 22:00</small>
+                        </div>
                     </div>
                 </div>
                 <div class="form-group" id="customHorariosGroup" style="display: none;">

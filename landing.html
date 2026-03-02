@@ -180,6 +180,25 @@
         }
         .btn-nav-login:hover { color: var(--text); background: var(--bg-soft); }
 
+        /* Botón "Ya tengo cuenta" — igual de visible que el CTA principal */
+        .btn-nav-ya-tengo {
+            padding: 10px 20px;
+            border-radius: 50px;
+            border: 2px solid var(--teal);
+            color: var(--teal);
+            font-weight: 700;
+            font-size: .9rem;
+            transition: all .22s;
+            display: inline-block;
+            white-space: nowrap;
+        }
+        .btn-nav-ya-tengo:hover {
+            background: var(--teal);
+            color: #fff;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 14px rgba(0,137,123,.25);
+        }
+
         .btn-nav-cta {
             background: var(--teal);
             color: white;
@@ -907,6 +926,7 @@
             .pricing-grid { grid-template-columns: 1fr; max-width: 420px; margin-left: auto; margin-right: auto; }
             .nav-links { display: none; }
             .btn-nav-login { display: none; }
+            .btn-nav-ya-tengo { display: none; }
             .trust-inner { gap: 18px; }
             .footer-grid { grid-template-columns: 1fr; gap: 32px; }
         }
@@ -936,7 +956,7 @@
                 <li><a href="#precios">Precios</a></li>
             </ul>
             <div class="nav-actions">
-                <a href="login.html" class="btn-nav-login">Iniciar sesión</a>
+                <a href="login.html" class="btn-nav-ya-tengo">Ya tengo cuenta</a>
                 <a href="login.html" class="btn-nav-cta">Comenzar gratis →</a>
             </div>
         </div>
@@ -968,12 +988,7 @@
                     <a href="login.html" class="btn btn-cta">Comenzar gratis →</a>
                     <a href="#como-funciona" class="btn btn-outline">Ver cómo funciona</a>
                 </div>
-                <div style="margin-top:12px;">
-                    <a href="login.html" style="color:var(--teal,#00897B);font-weight:600;font-size:0.9rem;text-decoration:none;opacity:0.85;transition:opacity 0.15s;"
-                       onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.85'">
-                        → Ya tengo cuenta
-                    </a>
-                </div>
+                <p style="margin-top:6px;font-size:0.85rem;color:var(--text-muted);">¿Ya tenés cuenta? <a href="login.html" style="color:var(--teal);font-weight:700;text-decoration:none;">Iniciá sesión →</a></p>
                 <div class="hero-proof">
                     <div class="hero-proof-item">
                         <span class="icon">✅</span> Gratis para empezar

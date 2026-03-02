@@ -374,7 +374,7 @@ const API = {
         const url = paciente_id
             ? `${this.BASE_URL}/api/historial-medicamentos?paciente_id=${paciente_id}`
             : `${this.BASE_URL}/api/historial-medicamentos`;
-        const response = await fetch(url, { headers: this.getHeaders() });
+        const response = await fetch(url, { headers: this.getHeaders(), cache: 'no-store' });
         return this.handleResponse(response);
     },
 
