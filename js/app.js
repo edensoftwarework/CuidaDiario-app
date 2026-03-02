@@ -30,7 +30,16 @@ async function initApp() {
         localStorage.removeItem('cuidadiario_premium_welcomed');
     }
 
-    const _shouldShowWelcome = _isPremiumNow && !localStorage.getItem('cuidadiario_premium_welcomed');
+    // Check servidor: el backend marcó premium_welcome_pending=TRUE al activar premium
+    // Esto es multi-dispositivo: funciona en cualquier dispositivo donde el usuario abra la app
+    const _serverWelcomePending = !!(_userOnInit && _userOnInit.premium_welcome_pending);
+    if (_serverWelcomePending && _isPremiumNow) {
+        localStorage.removeItem('cuidadiario_premium_welcomed');
+        // Acknowledge inmediatamente en backend para que no se repita en otros dispositivos
+        API.acknowledgePremiumWelcome().catch(() => {});
+    }
+
+    const _shouldShowWelcome = _isPremiumNow && (!localStorage.getItem('cuidadiario_premium_welcomed') || _serverWelcomePending);
 
     // Verificar en background si la suscripción MP fue cancelada
     // (garantiza que el estado sea correcto en cada apertura de la app)
@@ -868,13 +877,13 @@ async function registrarCumplimientoTarea(id) {
     const tareas = await Storage.getTareas();
     const tarea = tareas.find(t => String(t.id) === String(id));
     if (!tarea) return;
-    if (tarea.completada) {
-        showToast('Esta tarea ya está completada', 'info');
-        return;
-    }
-    if (!confirm(`✅ ¿Registrar cumplimiento de "${tarea.titulo}"?`)) return;
-    await Storage.updateTarea(id, { completada: true });
-    showToast(`✓ Cumplimiento registrado: ${tarea.titulo}`, 'success');
+    if (!confirm(`✅ ¿Registrar como realizada "${tarea.titulo}"?`)) return;
+    await Storage.addHistorialTarea({
+        tareaId: id,
+        tarea_titulo: tarea.titulo,
+        notas: ''
+    });
+    showToast(`✓ Realizada registrada: ${tarea.titulo}`, 'success');
     await loadTareas();
     await loadDashboard();
 }
@@ -1601,11 +1610,8 @@ async function loadTareas(filter = 'todas') {
                     <p class="item-subtitle">${formatDate(tarea.fecha)}${tarea.hora ? ` - ${tarea.hora}` : ''}</p>
                 </div>
                 <div class="item-actions">
-                    <button class="btn-icon btn-registrar-toma" onclick="registrarCumplimientoTarea('${tarea.id}')" title="Registrar cumplimiento">✅ Registrar</button>
+                    <button class="btn-icon btn-registrar-toma" onclick="registrarCumplimientoTarea('${tarea.id}')" title="Registrar realizada">✅ Registrar realizada</button>
                     ${limits.premium ? `<button class="btn-icon btn-gcal" onclick="addTareaToGoogleCalendar('${encodeURIComponent(tarea.titulo)}','${tarea.fecha}','${tarea.hora || ''}','${encodeURIComponent(tarea.descripcion || '')}')" title="Agregar a Google Calendar">📅 Google Cal</button>` : ''}
-                    <button class="btn-icon ${tarea.completada ? 'btn-reabrir-tarea' : 'btn-completar-tarea'}" onclick="toggleTareaCompletada('${tarea.id}')" title="${tarea.completada ? 'Marcar pendiente' : 'Marcar completada'}">
-                        ${tarea.completada ? '↩️ Reabrir' : '✓ Completar'}
-                    </button>
                     <button class="btn-icon" onclick="editTarea('${tarea.id}')" title="Editar">✏️</button>
                     <button class="btn-icon" onclick="deleteTarea('${tarea.id}')" title="Eliminar">🗑️</button>
                 </div>
@@ -1633,6 +1639,9 @@ async function loadTareas(filter = 'todas') {
             </div>
         </div>
     `, pMap);
+
+    // Cargar historial de realizaciones
+    await loadHistorialTareas();
 }
 
 function formatCategoriaTarea(categoria) {
@@ -1657,7 +1666,48 @@ function formatFrecuenciaTarea(frecuencia) {
     return map[frecuencia] || frecuencia;
 }
 
-// ========== GOOGLE CALENDAR (PREMIUM) ==========
+async function loadHistorialTareas() {
+    let isPremium = Storage.getPremiumStatus();
+    if (!isPremium && await isViewingSharedPatient()) isPremium = true;
+    const LIMIT_FREE = 10;
+    const LIMIT_PREMIUM = 100;
+
+    const historialSection = document.getElementById('tareasHistorial');
+    if (!historialSection) return;
+    historialSection.style.display = 'block';
+
+    const historialData = await Storage.getHistorialTareas();
+    const historial = historialData.slice(0, isPremium ? LIMIT_PREMIUM : LIMIT_FREE);
+    const container = document.getElementById('tareasHistorialList');
+    if (!container) return;
+
+    if (historial.length === 0) {
+        container.innerHTML = '<p class="empty-state">No hay registros de realización</p>';
+        return;
+    }
+
+    container.innerHTML = historial.map(h => `
+        <div class="historial-item">
+            <div class="historial-info">
+                <strong>${h.tarea_titulo || '—'}</strong>
+                ${h.notas ? `<br><small>${h.notas}</small>` : ''}
+            </div>
+            <div class="historial-fecha">${formatDateTime(h.fecha)}</div>
+            <button class="btn-icon btn-historial-delete" onclick="deleteHistorialTareaEntry(${h.id})" title="Eliminar registro">🗑️</button>
+        </div>
+    `).join('');
+}
+
+async function deleteHistorialTareaEntry(id) {
+    if (!confirm('¿Eliminar este registro?')) return;
+    try {
+        await Storage.deleteHistorialTarea(id);
+        showToast('Registro eliminado', 'success');
+        await loadHistorialTareas();
+    } catch (err) {
+        showToast('No se pudo eliminar el registro', 'error');
+    }
+}
 // Crea un enlace de Google Calendar y lo abre en una nueva pestaña.
 // Requiere plan Premium — los botones solo se renderizan para usuarios premium.
 function addCitaToGoogleCalendar(encodedTitulo, fecha, hora, encodedLugar, encodedNotas) {
@@ -2925,6 +2975,10 @@ window.deleteMedicamento = deleteMedicamento;
 window.saveMedicamento = saveMedicamento;
 window.registrarTomaMedicamento = registrarTomaMedicamento;
 window.registrarCumplimientoTarea = registrarCumplimientoTarea;
+window.loadHistorialTareas = loadHistorialTareas;
+window.deleteHistorialTareaEntry = deleteHistorialTareaEntry;
+window.loadHistorialTareas = loadHistorialTareas;
+window.deleteHistorialTareaEntry = deleteHistorialTareaEntry;
 window.openCitaModal = openCitaModal;
 window.closeCitaModal = closeCitaModal;
 window.editCita = editCita;

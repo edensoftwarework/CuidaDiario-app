@@ -395,7 +395,42 @@ const API = {
         return this.handleResponse(response);
     },
 
-    // ==================== PACIENTES ====================
+    // ==================== HISTORIAL TAREAS ====================
+
+    async getHistorialTareas(paciente_id = null) {
+        const url = paciente_id
+            ? `${this.BASE_URL}/api/historial-tareas?paciente_id=${paciente_id}`
+            : `${this.BASE_URL}/api/historial-tareas`;
+        const response = await fetch(url, { headers: this.getHeaders(), cache: 'no-store' });
+        return this.handleResponse(response);
+    },
+
+    async createHistorialTarea(data) {
+        const response = await fetch(`${this.BASE_URL}/api/historial-tareas`, {
+            method: 'POST',
+            headers: this.getHeaders(),
+            body: JSON.stringify(data)
+        });
+        return this.handleResponse(response);
+    },
+
+    async deleteHistorialTarea(id) {
+        const response = await fetch(`${this.BASE_URL}/api/historial-tareas/${id}`, {
+            method: 'DELETE',
+            headers: this.getHeaders()
+        });
+        return this.handleResponse(response);
+    },
+
+    // ==================== PREMIUM WELCOME ====================
+
+    async acknowledgePremiumWelcome() {
+        const response = await fetch(`${this.BASE_URL}/api/premium/acknowledge-welcome`, {
+            method: 'POST',
+            headers: this.getHeaders()
+        });
+        return this.handleResponse(response);
+    },
 
     async getPacientes() {
         const response = await fetch(`${this.BASE_URL}/api/pacientes`, {

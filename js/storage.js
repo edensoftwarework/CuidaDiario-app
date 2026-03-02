@@ -287,7 +287,33 @@ const Storage = {
         }
     },
 
-    // ========== SIGNOS VITALES (API) ==========
+    // ========== HISTORIAL TAREAS (API) ==========
+    async getHistorialTareas() {
+        try {
+            return await API.getHistorialTareas(this.currentPacienteId);
+        } catch (error) {
+            console.error('Error:', error);
+            return [];
+        }
+    },
+
+    async addHistorialTarea(registro) {
+        try {
+            if (this.currentPacienteId) registro = { ...registro, paciente_id: this.currentPacienteId };
+            return await API.createHistorialTarea(registro);
+        } catch (error) {
+            console.error('Error:', error);
+        }
+    },
+
+    async deleteHistorialTarea(id) {
+        try {
+            return await API.deleteHistorialTarea(id);
+        } catch (error) {
+            console.error('Error al eliminar registro de tarea:', error);
+            throw error;
+        }
+    },
     async getSignosVitales() {
         try {
             return await API.getSignosVitales(this.currentPacienteId);
