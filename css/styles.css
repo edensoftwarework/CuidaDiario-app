@@ -41,7 +41,7 @@
 }
 
 html {
-    overflow-x: hidden; /* Previene scroll horizontal sin romper position:fixed en Safari móvil */
+    overflow-x: clip; /* overflow:clip NO crea scroll container → no rompe position:fixed en ningún browser */
 }
 
 body {
@@ -589,6 +589,23 @@ body {
 }
 .btn-registrar-toma:hover {
     background: #E65100;
+    transform: scale(1.05);
+}
+
+/* Botón Google Calendar — azul Google */
+.btn-gcal {
+    background: #1a73e8;
+    color: #fff;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 5px 9px;
+    border-radius: 20px;
+    opacity: 1;
+    white-space: nowrap;
+    letter-spacing: 0.2px;
+}
+.btn-gcal:hover {
+    background: #1557b0;
     transform: scale(1.05);
 }
 
@@ -1747,6 +1764,22 @@ body {
     .footer-content {
         grid-template-columns: 1fr;
         gap: 20px;
+    }
+
+    /* Tarjetas con muchos botones (ej. tareas premium): acciones van en fila propia */
+    .item-header {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .item-actions {
+        width: 100%;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+    .btn-registrar-toma,
+    .btn-gcal {
+        font-size: 0.72rem;
+        padding: 4px 8px;
     }
 }
 
