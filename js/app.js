@@ -3173,14 +3173,40 @@ async function resyncPushSubscription() {
     try {
         const reg = await navigator.serviceWorker.ready;
         const existing = await reg.pushManager.getSubscription();
-        if (existing) {
-            // Siempre re-guardar: el backend hace ON CONFLICT UPDATE, no hay duplicados
+
+        // ── Renovación forzada una vez por día ──────────────────────────────────────
+        // Las suscripciones push de Chrome/Android pueden expirar silenciosamente de noche
+        // sin que el navegador lo notifique al frontend. Al renovar cada 24h garantizamos
+        // que el servidor siempre tiene un endpoint válido para cada dispositivo.
+        const lastRenew = localStorage.getItem('push_renew_date');
+        const today = new Date().toISOString().split('T')[0];
+        const needsRenewal = lastRenew !== today;
+
+        if (existing && needsRenewal) {
+            try {
+                // Eliminar del servidor + desuscribir del browser + re-suscribir fresco
+                await API.deletePushSubscription(existing.endpoint).catch(() => {});
+                await existing.unsubscribe();
+                const ok = await _autoSubscribePush(reg);
+                if (ok) {
+                    localStorage.setItem('push_renew_date', today);
+                    console.log('[Push] Suscripción renovada diariamente ✅');
+                } else {
+                    // Falló la renovación → guardar la anterior como fallback
+                    console.warn('[Push] Renovación fallida, se reintentará en el próximo inicio');
+                }
+            } catch (e) {
+                console.warn('[Push] Error durante renovación diaria:', e.message);
+            }
+        } else if (existing) {
+            // Siempre re-guardar en el servidor (ON CONFLICT UPDATE → no hay duplicados)
             API.savePushSubscription(existing.toJSON())
                 .then(() => console.log('[Push] Suscripción re-sincronizada con backend ✅'))
                 .catch(e => console.warn('[Push] Resync fallido (se reintenta en próximo login):', e.message));
         } else {
             // Permiso concedido pero sin suscripción activa → recrear automáticamente
-            await _autoSubscribePush(reg);
+            const ok = await _autoSubscribePush(reg);
+            if (ok) localStorage.setItem('push_renew_date', today);
         }
     } catch (e) {
         console.warn('[Push] Error en resync:', e.message);
