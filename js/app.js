@@ -292,6 +292,15 @@ function setupNavigation() {
             navMenu.classList.toggle('active');
         });
     }
+
+    // Cerrar menú móvil al tocar fuera de él
+    document.addEventListener('click', (e) => {
+        if (navMenu && navMenu.classList.contains('active')) {
+            if (!navMenu.contains(e.target) && (!navToggle || !navToggle.contains(e.target))) {
+                navMenu.classList.remove('active');
+            }
+        }
+    });
 }
 
 async function navigateToSection(sectionId) {

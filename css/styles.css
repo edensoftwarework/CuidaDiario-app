@@ -205,7 +205,7 @@ body {
     align-items: center;
     gap: 3px;
     box-shadow: 0 6px 24px rgba(0,0,0,0.38), 0 2px 8px rgba(0,0,0,0.22);
-    z-index: 900;
+    z-index: 1100;
     user-select: none;
 }
 
@@ -306,6 +306,8 @@ body {
     display: block;
     pointer-events: auto;
     animation: fadeIn 0.25s ease;
+    z-index: 1;          /* evita que la animación cree un stacking context sobre el pill */
+    position: relative;  /* necesario para que z-index tenga efecto */
 }
 
 @keyframes fadeIn {

@@ -430,12 +430,6 @@
             </section>
         </div>
 
-        <!-- Navegador de secciones: flechas izquierda/derecha -->
-        <div id="sectionNavPill" class="section-nav-pill">
-            <button id="prevSectionBtn" class="snav-btn" onclick="navigatePrevSection()" aria-label="Sección anterior">&#8592;</button>
-            <span id="sectionNavLabel" class="snav-label">Inicio</span>
-            <button id="nextSectionBtn" class="snav-btn" onclick="navigateNextSection()" aria-label="Siguiente sección">&#8594;</button>
-        </div>
     </main>
 
     <!-- Footer -->
@@ -1166,6 +1160,12 @@
             };
         }
     </script>
+    <!-- Navegador de secciones: flechas izquierda/derecha (hijo directo de body para evitar conflictos de posicionamiento fijo) -->
+    <div id="sectionNavPill" class="section-nav-pill">
+        <button id="prevSectionBtn" class="snav-btn" onclick="navigatePrevSection()" aria-label="Sección anterior">&#8592;</button>
+        <span id="sectionNavLabel" class="snav-label">Inicio</span>
+        <button id="nextSectionBtn" class="snav-btn" onclick="navigateNextSection()" aria-label="Siguiente sección">&#8594;</button>
+    </div>
 </body>
 </html>
 
