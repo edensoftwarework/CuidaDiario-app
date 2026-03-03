@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Generador og-image.png — CuidaDiario</title>
+    <style>
+        body { margin: 0; background: #1a1a2e; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; font-family: 'Segoe UI', sans-serif; color: white; gap: 20px; }
+        canvas { border-radius: 12px; box-shadow: 0 8px 40px rgba(0,0,0,0.5); }
+        button { padding: 14px 32px; background: #4CAF50; color: white; border: none; border-radius: 8px; font-size: 1rem; font-weight: 700; cursor: pointer; }
+        button:hover { background: #43A047; }
+        p { color: #aaa; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+    <p>Vista previa de la imagen para redes sociales (1200×630)</p>
+    <canvas id="c" width="1200" height="630"></canvas>
+    <button onclick="descargar()">⬇ Descargar og-image.png</button>
+    <p>Guardá el archivo como <strong>og-image.png</strong> en la raíz del proyecto y hacé push.</p>
+
+    <script>
+        const canvas = document.getElementById('c');
+        const ctx = canvas.getContext('2d');
+        const W = 1200, H = 630;
+
+        function draw() {
+            // ── Fondo degradado teal
+            const grad = ctx.createLinearGradient(0, 0, W, H);
+            grad.addColorStop(0,   '#00695C');
+            grad.addColorStop(0.5, '#00897B');
+            grad.addColorStop(1,   '#4CAF50');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, W, H);
+
+            // ── Círculos decorativos de fondo
+            ctx.globalAlpha = 0.08;
+            ctx.fillStyle = 'white';
+            circle(ctx, -80, -80, 320);
+            circle(ctx, W + 60, H + 60, 380);
+            circle(ctx, W - 100, 80, 180);
+            ctx.globalAlpha = 1;
+
+            // ── Ícono (cruz verde sobre fondo blanco redondeado)
+            const iconX = 100, iconY = H / 2 - 90, iconSize = 180;
+            roundRect(ctx, iconX, iconY, iconSize, iconSize, 36, '#FFFFFF');
+
+            // Cruz médica verde
+            ctx.fillStyle = '#4CAF50';
+            const cx = iconX + iconSize / 2;
+            const cy = iconY + iconSize / 2;
+            const armW = iconSize * 0.25;
+            const armH = iconSize * 0.62;
+            roundRect(ctx, cx - armW / 2, cy - armH / 2, armW, armH, 6, '#4CAF50');
+            roundRect(ctx, cx - armH / 2, cy - armW / 2, armH, armW, 6, '#4CAF50');
+
+            // Corazón pequeño en el centro de la cruz
+            ctx.fillStyle = 'white';
+            drawHeart(ctx, cx, cy + 4, 18);
+
+            // ── Textos
+            // "CuidaDiario"
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = 'bold 88px "Segoe UI", Arial, sans-serif';
+            ctx.letterSpacing = '-2px';
+            ctx.fillText('CuidaDiario', 320, 290);
+
+            // Tagline
+            ctx.font = '400 38px "Segoe UI", Arial, sans-serif';
+            ctx.fillStyle = 'rgba(255,255,255,0.88)';
+            ctx.fillText('La app que organiza el cuidado de tu familia', 320, 358);
+
+            // Separador
+            ctx.fillStyle = 'rgba(255,255,255,0.3)';
+            ctx.fillRect(320, 385, 620, 2);
+
+            // Features
+            ctx.font = '500 26px "Segoe UI", Arial, sans-serif';
+            ctx.fillStyle = 'rgba(255,255,255,0.75)';
+            const features = ['💊 Medicamentos', '📅 Citas', '✓ Tareas', '🔔 Recordatorios'];
+            let fx = 320;
+            features.forEach(f => {
+                ctx.fillText(f, fx, 432);
+                fx += ctx.measureText(f).width + 36;
+            });
+
+            // Badge "Gratis para empezar"
+            ctx.fillStyle = 'rgba(255,255,255,0.18)';
+            roundRect(ctx, 320, 460, 270, 50, 25, 'rgba(255,255,255,0.18)');
+            ctx.font = 'bold 22px "Segoe UI", Arial, sans-serif';
+            ctx.fillStyle = 'white';
+            ctx.fillText('✓ Gratis para empezar', 340, 491);
+
+            // "by EDEN SoftWork"
+            ctx.font = '400 22px "Segoe UI", Arial, sans-serif';
+            ctx.fillStyle = 'rgba(255,255,255,0.5)';
+            ctx.fillText('by EDEN SoftWork', 320, 560);
+
+            // URL
+            ctx.font = '400 22px "Segoe UI", Arial, sans-serif';
+            ctx.fillStyle = 'rgba(255,255,255,0.45)';
+            ctx.fillText('cuidadiario.edensoftwork.com', W - 420, H - 32);
+        }
+
+        function circle(ctx, x, y, r) {
+            ctx.beginPath();
+            ctx.arc(x, y, r, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function roundRect(ctx, x, y, w, h, r, fill) {
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.lineTo(x + w - r, y);
+            ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+            ctx.lineTo(x + w, y + h - r);
+            ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+            ctx.lineTo(x + r, y + h);
+            ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+            ctx.lineTo(x, y + r);
+            ctx.quadraticCurveTo(x, y, x + r, y);
+            ctx.closePath();
+            ctx.fillStyle = fill;
+            ctx.fill();
+        }
+
+        function drawHeart(ctx, cx, cy, size) {
+            ctx.beginPath();
+            ctx.moveTo(cx, cy + size * 0.6);
+            ctx.bezierCurveTo(cx - size * 1.2, cy, cx - size * 1.2, cy - size * 0.8, cx, cy - size * 0.2);
+            ctx.bezierCurveTo(cx + size * 1.2, cy - size * 0.8, cx + size * 1.2, cy, cx, cy + size * 0.6);
+            ctx.fill();
+        }
+
+        function descargar() {
+            const link = document.createElement('a');
+            link.download = 'og-image.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+
+        draw();
+
+        // Auto-descarga al abrir (comentado — descomentá si querés descarga automática)
+        // window.onload = () => setTimeout(descargar, 500);
+    </script>
+</body>
+</html>
