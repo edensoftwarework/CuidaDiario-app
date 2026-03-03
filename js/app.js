@@ -1615,7 +1615,28 @@ async function loadTareas(filter = 'todas') {
     }
     
     const pMap = !Storage.currentPacienteId ? await getPacienteNombreMap() : null;
-    container.innerHTML = renderWithPatientGroups(filtered, tarea => `
+
+    // Contador de realizaciones del día actual por tarea (igual que tomas en medicamentos)
+    const todayLocalStr = (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; })();
+    const historialTareasData = await Storage.getHistorialTareas();
+    const realizacionesHoy = {};
+    historialTareasData.forEach(h => {
+        if (h.fecha) {
+            const d = new Date(h.fecha);
+            const fechaLocal = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+            if (fechaLocal === todayLocalStr) {
+                const tid = String(h.tarea_id || h.tareaId || '');
+                realizacionesHoy[tid] = (realizacionesHoy[tid] || 0) + 1;
+            }
+        }
+    });
+
+    container.innerHTML = renderWithPatientGroups(filtered, tarea => {
+        const countHoy = realizacionesHoy[String(tarea.id)] || 0;
+        const counterHtml = countHoy > 0
+            ? `<div class="toma-counter"><span class="toma-counter-label">Hoy:</span><span class="toma-counter-num">${countHoy} ${countHoy === 1 ? 'vez' : 'veces'}</span></div>`
+            : '';
+        return `
         <div class="item-card${tarea.completada ? ' task-completada' : ''}" id="tarea-${tarea.id}">
             <div class="item-header">
                 <div>
@@ -1623,10 +1644,7 @@ async function loadTareas(filter = 'todas') {
                     <p class="item-subtitle">${formatDate(tarea.fecha)}${tarea.hora ? ` - ${tarea.hora}` : ''}</p>
                 </div>
                 <div class="item-actions">
-                    ${tarea.completada
-                        ? `<span class="item-badge badge-completed task-done-label">✅ Realizada</span>`
-                        : `<button class="btn-icon btn-registrar-toma" onclick="registrarCumplimientoTarea('${tarea.id}')" title="Registrar realizada">✅ Registrar realizada</button>`
-                    }
+                    <button class="btn-icon btn-registrar-toma" onclick="registrarCumplimientoTarea('${tarea.id}')" title="Registrar realizada">✅ Registrar realizada</button>
                     ${limits.premium ? `<button class="btn-icon btn-gcal" onclick="addTareaToGoogleCalendar('${encodeURIComponent(tarea.titulo)}','${tarea.fecha}','${tarea.hora || ''}','${encodeURIComponent(tarea.descripcion || '')}')" title="Agregar a Google Calendar">📅 Google Cal</button>` : ''}
                     <button class="btn-icon" onclick="editTarea('${tarea.id}')" title="Editar">✏️</button>
                     <button class="btn-icon" onclick="deleteTarea('${tarea.id}')" title="Eliminar">🗑️</button>
@@ -1652,9 +1670,11 @@ async function loadTareas(filter = 'todas') {
                     <span>${tarea.descripcion}</span>
                 </div>
                 ` : ''}
+                ${counterHtml ? `<div class="item-detail">${counterHtml}</div>` : ''}
             </div>
         </div>
-    `, pMap);
+        `;
+    }, pMap);
 
     // Cargar historial de realizaciones
     await loadHistorialTareas();
