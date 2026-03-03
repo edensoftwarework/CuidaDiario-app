@@ -323,7 +323,16 @@ async function navigateToSection(sectionId) {
     
     // Scroll to top
     window.scrollTo(0, 0);
-    
+
+    // Trackear navegación interna como page_view en Google Analytics
+    if (typeof gtag === 'function') {
+        gtag('event', 'page_view', {
+            page_title: sectionId,
+            page_location: window.location.href,
+            page_path: '/' + sectionId
+        });
+    }
+
     // Actualizar contenido según la sección
     switch(sectionId) {
         case 'dashboard':
