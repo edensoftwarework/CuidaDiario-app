@@ -24,20 +24,26 @@ async function initApp() {
     const _userOnInit = API.getUser();
     const _isPremiumNow = !!(_userOnInit && _userOnInit.premium);
 
-    // Check servidor: el backend marcó premium_welcome_pending=TRUE al activar premium
-    // Esto es multi-dispositivo: funciona en cualquier dispositivo donde el usuario abra la app
+    // Detectar transición no-premium → premium en ESTE dispositivo.
+    // Esto ocurre cuando:
+    //   (a) El usuario nunca fue premium en este dispositivo y ahora sí lo es (primer login como premium)
+    //   (b) El usuario canceló premium y volvió a suscribirse
+    // En ambos casos, limpiar el flag local para que el modal aparezca una vez.
+    const _newPremiumOnThisDevice = !_premiumBefore && _isPremiumNow;
+    if (_newPremiumOnThisDevice) {
+        localStorage.removeItem('cuidadiario_premium_welcomed');
+    }
+
+    // Acknowledge servidor (multi-dispositivo): informar al backend que este dispositivo
+    // ya recibió el aviso. Independiente de la lógica del flag local.
     const _serverWelcomePending = !!(_userOnInit && _userOnInit.premium_welcome_pending);
     if (_serverWelcomePending && _isPremiumNow) {
-        // Nueva suscripción confirmada por servidor → resetear timestamp para que aparezca ahora
-        localStorage.removeItem('cuidadiario_premium_welcomed');
-        // Acknowledge inmediatamente en backend para que no se repita en otros dispositivos
         API.acknowledgePremiumWelcome().catch(() => {});
     }
 
-    // El modal aplica su propia restricción semanal internamente.
-    // force=true solo cuando el servidor confirmó nueva suscripción (bypasa la semana).
+    // Mostrar modal si es premium (el modal verifica internamente si ya se mostró en este dispositivo)
     const _shouldShowWelcome = _isPremiumNow;
-    const _forceWelcome = _serverWelcomePending;
+    const _forceWelcome = false; // nunca forzar — el flag local ya fue limpiado si es nueva suscripción
 
     // Verificar en background si la suscripción MP fue cancelada
     // (garantiza que el estado sea correcto en cada apertura de la app)
@@ -770,6 +776,7 @@ async function openMedicamentoModal() {
     document.getElementById('medicamentoModalTitle').textContent = 'Agregar Medicamento';
     document.getElementById('medicamentoForm').reset();
     document.getElementById('medId').value = '';
+    document.getElementById('medRecordatorio').checked = true; // recordatorio activado por defecto
     document.getElementById('customHorariosGroup').style.display = 'none';
     // Restaurar visibilidad de hora_fin (por si quedó oculto de edición anterior con 'diaria')
     const hfgNew = document.getElementById('medHoraFinGroup');
@@ -1193,6 +1200,7 @@ async function openCitaModal() {
     document.getElementById('citaModalTitle').textContent = 'Agregar Cita';
     document.getElementById('citaForm').reset();
     document.getElementById('citaId').value = '';
+    document.getElementById('citaRecordatorio').value = '60'; // 1 hora antes por defecto
     document.getElementById('citaModal').classList.add('active');
 }
 
@@ -1928,6 +1936,7 @@ async function openTareaModal() {
     document.getElementById('tareaForm').reset();
     document.getElementById('tareaId').value = '';
     document.getElementById('tareaFecha').value = new Date().toISOString().split('T')[0];
+    document.getElementById('tareaRecordatorio').checked = true; // recordatorio activado por defecto
     document.getElementById('tareaRecurrenteGroup').style.display = 'none';
     document.getElementById('tareaModal').classList.add('active');
 }
@@ -2247,20 +2256,19 @@ function confirmarBorrarDatos() {
 
 // ========== PREMIUM ==========
 function showPremiumWelcomeModal(force = false) {
-    // Con force=false: respetar restricción semanal (una vez por semana como máximo).
-    // Con force=true: mostrar siempre (nueva suscripción desde flujo de pago o servidor).
-    if (!force) {
-        const lastShown = parseInt(localStorage.getItem('cuidadiario_premium_welcomed') || '0', 10);
-        const sevenDays = 7 * 24 * 60 * 60 * 1000;
-        if (lastShown && (Date.now() - lastShown) < sevenDays) return;
-    }
+    // Una sola vez por dispositivo por período de suscripción.
+    // El flag 'cuidadiario_premium_welcomed' se limpia cuando:
+    //   - Se detecta transición no-premium → premium (initApp)
+    //   - El usuario cancela premium (_syncMPCancellation)
+    //   - Se retorna del flujo de pago (checkMercadoPagoReturn)
+    if (!force && localStorage.getItem('cuidadiario_premium_welcomed')) return;
 
     // Si ya hay un modal previo en el DOM, eliminarlo primero
     const existing = document.getElementById('premiumWelcomeModal');
     if (existing) existing.remove();
 
-    // Registrar timestamp de la última vez que se mostró el modal
-    localStorage.setItem('cuidadiario_premium_welcomed', Date.now().toString());
+    // Marcar como mostrado en este dispositivo (permanente hasta nueva suscripción)
+    localStorage.setItem('cuidadiario_premium_welcomed', '1');
 
     const modal = document.createElement('div');
     modal.id = 'premiumWelcomeModal';
