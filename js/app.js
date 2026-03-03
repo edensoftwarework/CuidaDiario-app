@@ -24,22 +24,20 @@ async function initApp() {
     const _userOnInit = API.getUser();
     const _isPremiumNow = !!(_userOnInit && _userOnInit.premium);
 
-    // Detectar re-suscripción: no era premium antes → ahora sí
-    // En ese caso limpiar la clave para que el modal aparezca siempre
-    if (!_premiumBefore && _isPremiumNow) {
-        localStorage.removeItem('cuidadiario_premium_welcomed');
-    }
-
     // Check servidor: el backend marcó premium_welcome_pending=TRUE al activar premium
     // Esto es multi-dispositivo: funciona en cualquier dispositivo donde el usuario abra la app
     const _serverWelcomePending = !!(_userOnInit && _userOnInit.premium_welcome_pending);
     if (_serverWelcomePending && _isPremiumNow) {
+        // Nueva suscripción confirmada por servidor → resetear timestamp para que aparezca ahora
         localStorage.removeItem('cuidadiario_premium_welcomed');
         // Acknowledge inmediatamente en backend para que no se repita en otros dispositivos
         API.acknowledgePremiumWelcome().catch(() => {});
     }
 
-    const _shouldShowWelcome = _isPremiumNow && (!localStorage.getItem('cuidadiario_premium_welcomed') || _serverWelcomePending);
+    // El modal aplica su propia restricción semanal internamente.
+    // force=true solo cuando el servidor confirmó nueva suscripción (bypasa la semana).
+    const _shouldShowWelcome = _isPremiumNow;
+    const _forceWelcome = _serverWelcomePending;
 
     // Verificar en background si la suscripción MP fue cancelada
     // (garantiza que el estado sea correcto en cada apertura de la app)
@@ -61,8 +59,8 @@ async function initApp() {
     await loadDashboard();
     loadAllSections();
 
-    // Mostrar bienvenida premium si se detectó re-suscripción al abrir la app
-    if (_shouldShowWelcome) setTimeout(showPremiumWelcomeModal, 1200);
+    // Mostrar bienvenida premium (respeta restricción semanal; force=true para suscripciones nuevas)
+    if (_shouldShowWelcome) setTimeout(() => showPremiumWelcomeModal(_forceWelcome), 1200);
     
     // Mostrar banner de bienvenida si es la primera vez
     showWelcomeBannerIfNeeded();
@@ -2240,19 +2238,20 @@ function confirmarBorrarDatos() {
 
 // ========== PREMIUM ==========
 function showPremiumWelcomeModal(force = false) {
-    // Se muestra una única vez por suscripción activa.
-    // Si el usuario cancela y vuelve a suscribirse, se vuelve a mostrar.
-    // Con force=true se muestra SIEMPRE (usado desde flujos de pago/restauración).
-    if (!force && localStorage.getItem('cuidadiario_premium_welcomed')) return;
+    // Con force=false: respetar restricción semanal (una vez por semana como máximo).
+    // Con force=true: mostrar siempre (nueva suscripción desde flujo de pago o servidor).
+    if (!force) {
+        const lastShown = parseInt(localStorage.getItem('cuidadiario_premium_welcomed') || '0', 10);
+        const sevenDays = 7 * 24 * 60 * 60 * 1000;
+        if (lastShown && (Date.now() - lastShown) < sevenDays) return;
+    }
 
     // Si ya hay un modal previo en el DOM, eliminarlo primero
     const existing = document.getElementById('premiumWelcomeModal');
     if (existing) existing.remove();
 
-    // Al mostrar (especialmente con force), limpiar primero la clave para asegurar
-    // que siempre se setee desde cero (cubre el caso de re-suscripción)
-    localStorage.removeItem('cuidadiario_premium_welcomed');
-    localStorage.setItem('cuidadiario_premium_welcomed', '1');
+    // Registrar timestamp de la última vez que se mostró el modal
+    localStorage.setItem('cuidadiario_premium_welcomed', Date.now().toString());
 
     const modal = document.createElement('div');
     modal.id = 'premiumWelcomeModal';
