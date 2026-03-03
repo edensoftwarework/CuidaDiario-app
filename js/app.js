@@ -892,6 +892,10 @@ async function registrarCumplimientoTarea(id) {
         tarea_titulo: tarea.titulo,
         notas: ''
     });
+    // Marcar la tarea como completada para que se refleje en la tarjeta y el dashboard
+    if (!tarea.completada) {
+        await Storage.updateTarea(id, { completada: true });
+    }
     showToast(`✓ Realizada registrada: ${tarea.titulo}`, 'success');
     await loadTareas();
     await loadDashboard();
@@ -1612,14 +1616,17 @@ async function loadTareas(filter = 'todas') {
     
     const pMap = !Storage.currentPacienteId ? await getPacienteNombreMap() : null;
     container.innerHTML = renderWithPatientGroups(filtered, tarea => `
-        <div class="item-card" id="tarea-${tarea.id}">
+        <div class="item-card${tarea.completada ? ' task-completada' : ''}" id="tarea-${tarea.id}">
             <div class="item-header">
                 <div>
                     <h3 class="item-title">${tarea.titulo}</h3>
                     <p class="item-subtitle">${formatDate(tarea.fecha)}${tarea.hora ? ` - ${tarea.hora}` : ''}</p>
                 </div>
                 <div class="item-actions">
-                    <button class="btn-icon btn-registrar-toma" onclick="registrarCumplimientoTarea('${tarea.id}')" title="Registrar realizada">✅ Registrar realizada</button>
+                    ${tarea.completada
+                        ? `<span class="item-badge badge-completed task-done-label">✅ Realizada</span>`
+                        : `<button class="btn-icon btn-registrar-toma" onclick="registrarCumplimientoTarea('${tarea.id}')" title="Registrar realizada">✅ Registrar realizada</button>`
+                    }
                     ${limits.premium ? `<button class="btn-icon btn-gcal" onclick="addTareaToGoogleCalendar('${encodeURIComponent(tarea.titulo)}','${tarea.fecha}','${tarea.hora || ''}','${encodeURIComponent(tarea.descripcion || '')}')" title="Agregar a Google Calendar">📅 Google Cal</button>` : ''}
                     <button class="btn-icon" onclick="editTarea('${tarea.id}')" title="Editar">✏️</button>
                     <button class="btn-icon" onclick="deleteTarea('${tarea.id}')" title="Eliminar">🗑️</button>

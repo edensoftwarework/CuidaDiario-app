@@ -528,6 +528,19 @@ body {
     box-shadow: var(--shadow-md);
 }
 
+.item-card.task-completada {
+    opacity: 0.72;
+    border-left: 4px solid var(--success-color);
+    background: #f6fef6;
+}
+
+.task-done-label {
+    font-size: 0.85rem;
+    padding: 5px 12px;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+}
+
 .item-header {
     display: flex;
     justify-content: space-between;
