@@ -103,7 +103,16 @@ const API = {
     
     logout() {
         this.removeToken();
-        window.location.href = 'login.html';
+        // Limpiar el cache de datos de API en el Service Worker antes de redirigir.
+        // Esto evita que un usuario posterior en el mismo dispositivo acceda a
+        // datos de salud del usuario anterior desde el caché offline.
+        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+            navigator.serviceWorker.controller.postMessage({ type: 'CLEAR_API_CACHE' });
+            // Pequeña espera para que el SW procese el mensaje antes del redirect
+            setTimeout(() => { window.location.href = 'login.html'; }, 150);
+        } else {
+            window.location.href = 'login.html';
+        }
     },
 
     // Recargar datos del usuario desde el backend y actualizar localStorage

@@ -70,6 +70,24 @@ self.addEventListener('activate', (event) => {
     );
 });
 
+// ===== MESSAGE: comandos desde la app =====
+// Permite que la app principal envíe mensajes al Service Worker.
+// Caso crítico: limpiar el cache de datos de usuario al hacer logout,
+// para que datos sensibles no persistan accesibles a otro usuario del dispositivo.
+self.addEventListener('message', (event) => {
+    if (event.data && event.data.type === 'CLEAR_API_CACHE') {
+        event.waitUntil(
+            caches.delete(API_CACHE_NAME)
+                .then(deleted => {
+                    if (event.source) {
+                        event.source.postMessage({ type: 'CLEAR_API_CACHE_DONE', deleted });
+                    }
+                })
+                .catch(err => console.warn('[SW] Error borrando API cache en logout:', err))
+        );
+    }
+});
+
 // ===== FETCH =====
 self.addEventListener('fetch', (event) => {
     const { request } = event;
