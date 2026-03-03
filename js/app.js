@@ -1710,9 +1710,7 @@ function formatCategoriaTarea(categoria) {
 function formatFrecuenciaTarea(frecuencia) {
     const map = {
         'unica': 'Única vez',
-        'diaria': 'Diaria',
-        'semanal': 'Semanal',
-        'mensual': 'Mensual'
+        'diaria': 'Diaria'
     };
     return map[frecuencia] || frecuencia;
 }
@@ -1962,9 +1960,12 @@ async function editTarea(id) {
     document.getElementById('tareaDescripcion').value = tarea.descripcion || '';
     document.getElementById('tareaRecordatorio').checked = tarea.recordatorio || false;
     
-    if (tarea.frecuencia !== 'unica') {
+    if (tarea.frecuencia === 'diaria') {
         document.getElementById('tareaRecurrenteGroup').style.display = 'block';
-        document.getElementById('tareaHastaFecha').value = tarea.hastaFecha || '';
+        document.getElementById('tareaHastaFecha').value = tarea.hasta_fecha || tarea.hastaFecha || '';
+    } else {
+        document.getElementById('tareaRecurrenteGroup').style.display = 'none';
+        document.getElementById('tareaHastaFecha').value = '';
     }
     
     document.getElementById('tareaModal').classList.add('active');
@@ -1992,12 +1993,7 @@ async function toggleTareaCompletada(id) {
 function updateTareaFechas() {
     const frecuencia = document.getElementById('tareaFrecuencia').value;
     const recurrenteGroup = document.getElementById('tareaRecurrenteGroup');
-    
-    if (frecuencia === 'unica') {
-        recurrenteGroup.style.display = 'none';
-    } else {
-        recurrenteGroup.style.display = 'block';
-    }
+    recurrenteGroup.style.display = frecuencia === 'diaria' ? 'block' : 'none';
 }
 
 async function saveTarea(event) {
@@ -2015,8 +2011,8 @@ async function saveTarea(event) {
         recordatorio: document.getElementById('tareaRecordatorio').checked
     };
     
-    if (tarea.frecuencia !== 'unica') {
-        tarea.hastaFecha = document.getElementById('tareaHastaFecha').value;
+    if (tarea.frecuencia === 'diaria') {
+        tarea.hastaFecha = document.getElementById('tareaHastaFecha').value || null;
     }
     
     const id = document.getElementById('tareaId').value;
