@@ -1053,13 +1053,13 @@
     <div class="modal" id="onboardingModal" style="z-index:10010;">
         <div class="modal-content" style="max-width:420px;padding:0;overflow:hidden;">
             <div style="height:4px;background:#e8eaf0;">
-                <div id="onbProgressBar" style="height:100%;width:25%;background:linear-gradient(135deg,#667eea,#764ba2);transition:width 0.35s ease;"></div>
+                <div id="onbProgressBar" style="height:100%;width:20%;background:linear-gradient(135deg,#667eea,#764ba2);transition:width 0.35s ease;"></div>
             </div>
             <!-- Paso 1 -->
             <div class="onb-step" id="onbStep1" style="padding:36px 28px 28px;text-align:center;">
                 <div style="font-size:3.5rem;margin-bottom:12px;">👋</div>
                 <h2 style="margin-bottom:10px;font-size:1.35rem;">¡Bienvenido/a a CuidaDiario!</h2>
-                <p style="color:var(--text-secondary);line-height:1.65;font-size:0.93rem;margin-bottom:24px;">La app pensada para organizar el cuidado de tus seres queridos.<br>Te mostramos las funciones principales en 3 pasos rápidos.</p>
+                <p style="color:var(--text-secondary);line-height:1.65;font-size:0.93rem;margin-bottom:24px;">La app pensada para organizar el cuidado de tus seres queridos.<br>Te mostramos las funciones principales en 4 pasos rápidos.</p>
                 <button onclick="onboardingNext()" class="btn-primary" style="width:100%;padding:13px;">Empezar →</button>
                 <button onclick="skipOnboarding()" style="margin-top:12px;background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:0.83rem;width:100%;">Saltar introducción</button>
             </div>
@@ -1073,12 +1073,19 @@
             <!-- Paso 3 -->
             <div class="onb-step" id="onbStep3" style="display:none;padding:36px 28px 28px;text-align:center;">
                 <div style="font-size:3.5rem;margin-bottom:12px;">📅</div>
-                <h2 style="margin-bottom:10px;font-size:1.35rem;">Citas, tareas y más</h2>
-                <p style="color:var(--text-secondary);line-height:1.65;font-size:0.93rem;margin-bottom:24px;">Agendá citas médicas con aviso anticipado, registrá tareas de cuidado, síntomas y signos vitales. Todo en un solo lugar.</p>
+                <h2 style="margin-bottom:10px;font-size:1.35rem;">Citas y tareas de cuidado</h2>
+                <p style="color:var(--text-secondary);line-height:1.65;font-size:0.93rem;margin-bottom:24px;">Agendá citas médicas con aviso anticipado y registrá las tareas de cuidado diarias como alimentación, higiene o ejercicio. Todo con recordatorio automático.</p>
                 <button onclick="onboardingNext()" class="btn-primary" style="width:100%;padding:13px;">Siguiente →</button>
             </div>
             <!-- Paso 4 -->
             <div class="onb-step" id="onbStep4" style="display:none;padding:36px 28px 28px;text-align:center;">
+                <div style="font-size:3.5rem;margin-bottom:12px;">🩺</div>
+                <h2 style="margin-bottom:10px;font-size:1.35rem;">Síntomas y signos vitales</h2>
+                <p style="color:var(--text-secondary);line-height:1.65;font-size:0.93rem;margin-bottom:24px;">Registrá síntomas con nivel de intensidad y mediciones como presión arterial, glucosa, temperatura, frecuencia cardíaca y más. Un historial completo para compartir con el médico en cada consulta.</p>
+                <button onclick="onboardingNext()" class="btn-primary" style="width:100%;padding:13px;">Siguiente →</button>
+            </div>
+            <!-- Paso 5 -->
+            <div class="onb-step" id="onbStep5" style="display:none;padding:36px 28px 28px;text-align:center;">
                 <div style="font-size:3.5rem;margin-bottom:12px;">🌟</div>
                 <h2 style="margin-bottom:10px;font-size:1.35rem;">¡Todo listo!</h2>
                 <p style="color:var(--text-secondary);line-height:1.65;font-size:0.93rem;margin-bottom:24px;">Ya podés empezar a usar CuidaDiario. Si tenés dudas o sugerencias, escribinos a <a href="mailto:edensoftwarework@gmail.com" style="color:#667eea;">edensoftwarework@gmail.com</a></p>

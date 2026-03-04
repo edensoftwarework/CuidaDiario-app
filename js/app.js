@@ -2616,7 +2616,7 @@ window.cerrarA2HSBanner = cerrarA2HSBanner;
 
 // ========== ONBOARDING (PRIMER USO) ==========
 const ONBOARDING_KEY = 'cuidadiario_onboarding_done';
-const ONBOARDING_STEPS = 4;
+const ONBOARDING_STEPS = 5;
 let _onbStep = 1;
 
 function showOnboarding() {
