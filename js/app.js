@@ -1274,19 +1274,11 @@ async function saveCita(event) {
 
 // ========== SÍNTOMAS Y SIGNOS VITALES ==========
 async function loadSintomas() {
-    let isPremium = Storage.getPremiumStatus();
-    if (!isPremium && await isViewingSharedPatient()) isPremium = true;
     const premiumBlock = document.getElementById('sintomasPremiumBlock');
     const content = document.getElementById('sintomasContent');
     const addBtn = document.querySelector('#sintomas .section-header .btn-primary');
 
-    if (!isPremium) {
-        if (premiumBlock) premiumBlock.style.display = 'flex';
-        if (content) content.style.display = 'none';
-        if (addBtn) addBtn.style.display = 'none';
-        return;
-    }
-
+    // Síntomas es gratuito para todos los usuarios
     if (premiumBlock) premiumBlock.style.display = 'none';
     if (content) content.style.display = 'block';
     if (addBtn) addBtn.style.display = '';
@@ -2300,14 +2292,6 @@ function showPremiumWelcomeModal(force = false) {
                             <strong style="font-size:0.93rem;">Co-cuidadores</strong>
                             <div style="font-size:0.82rem;color:#666;margin-top:2px;">Invitá a un familiar o cuidador externo a ver los datos de un paciente. El invitado tiene acceso de solo lectura: puede consultar medicamentos, citas y tareas, pero no puede modificar nada. Vos sos siempre el administrador.</div>
                             <div style="font-size:0.78rem;color:#aaa;margin-top:3px;">&#128100; Gestión de Pacientes &rarr; botón Invitar Co-cuidador</div>
-                        </div>
-                    </li>
-
-                    <li style="display:flex;gap:10px;align-items:flex-start;">
-                        <span style="font-size:1.3rem;line-height:1;">&#129658;</span>
-                        <div>
-                            <strong style="font-size:0.93rem;">Síntomas y signos vitales</strong>
-                            <div style="font-size:0.82rem;color:#666;margin-top:2px;">Registrá tensión arterial, glucosa, temperatura, peso y más. Seguimiento completo del estado de salud.</div>
                         </div>
                     </li>
 
