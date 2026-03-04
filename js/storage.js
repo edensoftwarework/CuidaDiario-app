@@ -462,7 +462,7 @@ const Storage = {
         if (isPremium) return true;
 
         const limits = {
-            medicamentos: 3,
+            medicamentos: 4,
             citas: 3,
             tareas: 3,
             contactos: 2
@@ -492,7 +492,7 @@ const Storage = {
             this.getContactos()
         ]);
 
-        const FREE = { medicamentos: 3, citas: 3, tareas: 3, contactos: 2 };
+        const FREE = { medicamentos: 4, citas: 3, tareas: 3, contactos: 2 };
 
         return {
             premium: false,
