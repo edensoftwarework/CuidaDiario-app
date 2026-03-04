@@ -512,7 +512,10 @@ const Reports = {
             'presion': 'Presión Arterial',
             'glucosa': 'Glucosa',
             'temperatura': 'Temperatura',
-            'peso': 'Peso'
+            'peso': 'Peso',
+            'frecuencia_cardiaca': 'Frec. Cardíaca',
+            'frecuencia_respiratoria': 'Frec. Respiratoria',
+            'saturacion_oxigeno': 'Saturación O₂'
         };
         return map[tipo] || tipo;
     },
@@ -527,6 +530,12 @@ const Reports = {
                 return `${signo.valor} °C`;
             case 'peso':
                 return `${signo.valor} kg`;
+            case 'frecuencia_cardiaca':
+                return `${signo.valor} lpm`;
+            case 'frecuencia_respiratoria':
+                return `${signo.valor} resp/min`;
+            case 'saturacion_oxigeno':
+                return `${signo.valor}%`;
             default:
                 return signo.valor;
         }

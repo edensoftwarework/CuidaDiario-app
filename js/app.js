@@ -1299,8 +1299,9 @@ async function renderSintomasList() {
     
     container.innerHTML = sintomasRecientes.map(s => {
         const intensidadClass = s.intensidad > 7 ? 'badge-urgent' : s.intensidad > 4 ? 'badge-pending' : 'badge-active';
+        const cardColorClass  = s.intensidad >= 7 ? 'sintoma-severo' : s.intensidad >= 4 ? 'sintoma-moderado' : 'sintoma-leve';
         return `
-            <div class="item-card">
+            <div class="item-card ${cardColorClass}">
                 <div class="item-header">
                     <div>
                         <h3 class="item-title">${s.tipo || 'Síntoma sin especificar'}</h3>
@@ -1336,7 +1337,7 @@ async function updateSignosVitales() {
     const signos = await Storage.getSignosVitales();
     
     // Actualizar últimos valores
-    const tipos = ['presion', 'glucosa', 'temperatura', 'peso'];
+    const tipos = ['presion', 'glucosa', 'temperatura', 'peso', 'frecuencia_cardiaca', 'frecuencia_respiratoria', 'saturacion_oxigeno'];
     tipos.forEach(tipo => {
         const signosTipo = signos.filter(s => s.tipo === tipo).sort((a, b) => 
             new Date(b.fecha) - new Date(a.fecha)
@@ -1364,15 +1365,65 @@ function renderSignosHistorial(signos) {
         return;
     }
     
-    container.innerHTML = ordenados.map(s => `
-        <div class="historial-item">
+    container.innerHTML = ordenados.map(s => {
+        const colorClass = getSignoColorClass(s);
+        return `
+        <div class="historial-item ${colorClass}">
             <div class="historial-info">
                 <strong>${formatSignoTipo(s.tipo)}</strong>: ${formatSignoValue(s)}
                 ${s.notas ? `<br><small>${s.notas}</small>` : ''}
             </div>
             <div class="historial-fecha">${formatDateTime(s.fecha)}</div>
         </div>
-    `).join('');
+    `}).join('');
+}
+
+/**
+ * Devuelve la clase CSS de color según si el valor está dentro del rango normal
+ */
+function getSignoColorClass(signo) {
+    switch (signo.tipo) {
+        case 'presion': {
+            const s = signo.sistolica, d = signo.diastolica;
+            if (!s || !d) return 'signo-gris';
+            if (s >= 90 && s <= 120 && d >= 60 && d <= 80) return 'signo-verde';
+            if (s <= 139 && d <= 89) return 'signo-naranja';
+            return 'signo-rojo';
+        }
+        case 'glucosa': {
+            const v = parseFloat(signo.valor);
+            if (v >= 70 && v <= 100) return 'signo-verde';
+            if (v > 100 && v <= 125) return 'signo-naranja';
+            return 'signo-rojo';
+        }
+        case 'temperatura': {
+            const v = parseFloat(signo.valor);
+            if (v >= 36.1 && v <= 37.2) return 'signo-verde';
+            if ((v >= 35.5 && v < 36.1) || (v > 37.2 && v <= 38.0)) return 'signo-naranja';
+            return 'signo-rojo';
+        }
+        case 'frecuencia_cardiaca': {
+            const v = parseFloat(signo.valor);
+            if (v >= 60 && v <= 100) return 'signo-verde';
+            if ((v >= 50 && v < 60) || (v > 100 && v <= 110)) return 'signo-naranja';
+            return 'signo-rojo';
+        }
+        case 'frecuencia_respiratoria': {
+            const v = parseFloat(signo.valor);
+            if (v >= 12 && v <= 20) return 'signo-verde';
+            if ((v >= 10 && v < 12) || (v > 20 && v <= 24)) return 'signo-naranja';
+            return 'signo-rojo';
+        }
+        case 'saturacion_oxigeno': {
+            const v = parseFloat(signo.valor);
+            if (v >= 95) return 'signo-verde';
+            if (v >= 90) return 'signo-naranja';
+            return 'signo-rojo';
+        }
+        case 'peso':
+        default:
+            return 'signo-gris';
+    }
 }
 
 function formatSignoTipo(tipo) {
@@ -1380,7 +1431,10 @@ function formatSignoTipo(tipo) {
         'presion': 'Presión Arterial',
         'glucosa': 'Glucosa',
         'temperatura': 'Temperatura',
-        'peso': 'Peso'
+        'peso': 'Peso',
+        'frecuencia_cardiaca': 'Frec. Cardíaca',
+        'frecuencia_respiratoria': 'Frec. Respiratoria',
+        'saturacion_oxigeno': 'Saturación O₂'
     };
     return map[tipo] || tipo;
 }
@@ -1395,6 +1449,12 @@ function formatSignoValue(signo) {
             return `${signo.valor} °C`;
         case 'peso':
             return `${signo.valor} kg`;
+        case 'frecuencia_cardiaca':
+            return `${signo.valor} lpm`;
+        case 'frecuencia_respiratoria':
+            return `${signo.valor} resp/min`;
+        case 'saturacion_oxigeno':
+            return `${signo.valor}%`;
         default:
             return signo.valor || '--';
     }
@@ -1495,12 +1555,14 @@ async function registrarSigno(tipo) {
             inputsContainer.innerHTML = `
                 <div class="form-row">
                     <div class="form-group">
-                        <label for="signoSistolica">Sistólica (mmHg) *</label>
-                        <input type="number" id="signoSistolica" required min="50" max="250">
+                        <label for="signoSistolica">Sistólica — número mayor (mmHg) *</label>
+                        <input type="number" id="signoSistolica" required min="50" max="250" placeholder="Ej: 120">
+                        <small class="input-hint">Normal: 90–120 mmHg</small>
                     </div>
                     <div class="form-group">
-                        <label for="signoDiastolica">Diastólica (mmHg) *</label>
-                        <input type="number" id="signoDiastolica" required min="30" max="150">
+                        <label for="signoDiastolica">Diastólica — número menor (mmHg) *</label>
+                        <input type="number" id="signoDiastolica" required min="30" max="150" placeholder="Ej: 80">
+                        <small class="input-hint">Normal: 60–80 mmHg</small>
                     </div>
                 </div>
             `;
@@ -1509,7 +1571,8 @@ async function registrarSigno(tipo) {
             inputsContainer.innerHTML = `
                 <div class="form-group">
                     <label for="signoValor">Glucosa (mg/dL) *</label>
-                    <input type="number" id="signoValor" required min="20" max="600">
+                    <input type="number" id="signoValor" required min="20" max="600" placeholder="Ej: 90">
+                    <small class="input-hint">Normal en ayunas: 70–100 mg/dL &nbsp;·&nbsp; Hasta 140 mg/dL 2h después de comer</small>
                 </div>
             `;
             break;
@@ -1517,7 +1580,8 @@ async function registrarSigno(tipo) {
             inputsContainer.innerHTML = `
                 <div class="form-group">
                     <label for="signoValor">Temperatura (°C) *</label>
-                    <input type="number" step="0.1" id="signoValor" required min="30" max="45">
+                    <input type="number" step="0.1" id="signoValor" required min="30" max="45" placeholder="Ej: 36.5">
+                    <small class="input-hint">Normal: 36.1–37.2 °C &nbsp;·&nbsp; Febrícula: 37.3–38.0 °C &nbsp;·&nbsp; Fiebre: &gt;38 °C</small>
                 </div>
             `;
             break;
@@ -1525,7 +1589,34 @@ async function registrarSigno(tipo) {
             inputsContainer.innerHTML = `
                 <div class="form-group">
                     <label for="signoValor">Peso (kg) *</label>
-                    <input type="number" step="0.1" id="signoValor" required min="10" max="300">
+                    <input type="number" step="0.1" id="signoValor" required min="10" max="300" placeholder="Ej: 70">
+                </div>
+            `;
+            break;
+        case 'frecuencia_cardiaca':
+            inputsContainer.innerHTML = `
+                <div class="form-group">
+                    <label for="signoValor">Frecuencia Cardíaca (lpm) *</label>
+                    <input type="number" id="signoValor" required min="20" max="300" placeholder="Ej: 75">
+                    <small class="input-hint">Normal en reposo: 60–100 lpm</small>
+                </div>
+            `;
+            break;
+        case 'frecuencia_respiratoria':
+            inputsContainer.innerHTML = `
+                <div class="form-group">
+                    <label for="signoValor">Frecuencia Respiratoria (resp/min) *</label>
+                    <input type="number" id="signoValor" required min="1" max="60" placeholder="Ej: 16">
+                    <small class="input-hint">Normal en adultos: 12–20 respiraciones/min</small>
+                </div>
+            `;
+            break;
+        case 'saturacion_oxigeno':
+            inputsContainer.innerHTML = `
+                <div class="form-group">
+                    <label for="signoValor">Saturación de Oxígeno (%) *</label>
+                    <input type="number" step="0.1" id="signoValor" required min="50" max="100" placeholder="Ej: 98">
+                    <small class="input-hint">Normal: 95–100% &nbsp;·&nbsp; Por debajo del 90% requiere atención médica</small>
                 </div>
             `;
             break;

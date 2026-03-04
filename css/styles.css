@@ -528,6 +528,20 @@ body {
     box-shadow: var(--shadow-md);
 }
 
+/* Espectro de color según intensidad del síntoma (amarillo → naranja → rojo) */
+.item-card.sintoma-leve {
+    border-left: 4px solid #F9A825;
+    background: linear-gradient(to right, #FFFDE7 0%, var(--bg-primary) 50%);
+}
+.item-card.sintoma-moderado {
+    border-left: 4px solid #EF6C00;
+    background: linear-gradient(to right, #FFF3E0 0%, var(--bg-primary) 50%);
+}
+.item-card.sintoma-severo {
+    border-left: 4px solid #C62828;
+    background: linear-gradient(to right, #FFEBEE 0%, var(--bg-primary) 50%);
+}
+
 .item-card.task-completada {
     opacity: 0.72;
     border-left: 4px solid var(--success-color);
@@ -993,8 +1007,8 @@ body {
    =========================================== */
 .signos-vitales-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 20px;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 16px;
     margin-bottom: 30px;
 }
 
@@ -1201,7 +1215,14 @@ body {
     justify-content: space-between;
     align-items: center;
     gap: 8px;
+    border-left: 4px solid transparent;
+    transition: border-color 0.2s;
 }
+/* Colores según rango normal del signo vital */
+.historial-item.signo-verde  { border-left-color: #43A047; background: linear-gradient(to right, #F1F8E9 0%, var(--bg-secondary) 50%); }
+.historial-item.signo-naranja { border-left-color: #EF6C00; background: linear-gradient(to right, #FFF3E0 0%, var(--bg-secondary) 50%); }
+.historial-item.signo-rojo   { border-left-color: #C62828; background: linear-gradient(to right, #FFEBEE 0%, var(--bg-secondary) 50%); }
+.historial-item.signo-gris   { border-left-color: #90A4AE; }
 
 .historial-info {
     flex: 1;
