@@ -535,32 +535,7 @@
         }
         .feat-card:hover::before { opacity: 1; }
 
-        .feat-card.premium {
-            background: linear-gradient(150deg, #FFFBF0 0%, #FFF8E6 100%);
-            border-color: #FFD54F;
-        }
-        .feat-card.premium:hover {
-            border-color: var(--gold);
-            box-shadow: 0 8px 32px rgba(245,158,11,.18);
-        }
-        .feat-card.premium::before {
-            background: linear-gradient(90deg, var(--gold), var(--orange));
-        }
 
-        .feat-premium-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            background: linear-gradient(135deg, var(--gold), var(--orange));
-            color: white;
-            font-size: .63rem;
-            font-weight: 800;
-            padding: 3px 10px;
-            border-radius: 20px;
-            text-transform: uppercase;
-            letter-spacing: .08em;
-            margin-bottom: 10px;
-        }
 
         .feat-icon { font-size: 2.1rem; margin-bottom: 14px; display: block; }
         .feat-title { font-size: 1.02rem; font-weight: 800; margin-bottom: 10px; letter-spacing: -.01em; }
@@ -613,121 +588,7 @@
         .step-title { font-size: 1.08rem; font-weight: 800; margin-bottom: 10px; letter-spacing: -.01em; }
         .step-desc { font-size: .88rem; color: var(--text-muted); line-height: 1.65; max-width: 220px; }
 
-        /* ============================================
-           PRICING
-        ============================================ */
-        .pricing-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 28px;
-            max-width: 760px;
-            margin: 60px auto 0;
-        }
 
-        .pricing-card {
-            background: white;
-            border: 1.5px solid var(--border);
-            border-radius: var(--radius);
-            padding: 36px 32px;
-            position: relative;
-            transition: all .25s;
-        }
-        .pricing-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
-
-        .pricing-card.featured {
-            border-color: var(--teal);
-            box-shadow: 0 12px 48px rgba(0,137,123,.18);
-        }
-        .pricing-card.featured:hover { box-shadow: 0 20px 60px rgba(0,137,123,.25); }
-
-        .pricing-top-badge {
-            position: absolute;
-            top: -15px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: linear-gradient(135deg, var(--teal), var(--teal-dark));
-            color: white;
-            padding: 5px 22px;
-            border-radius: 50px;
-            font-size: .76rem;
-            font-weight: 800;
-            white-space: nowrap;
-            letter-spacing: .04em;
-        }
-
-        .pricing-plan-name { font-size: 1.05rem; font-weight: 800; margin-bottom: 10px; color: var(--text-muted); }
-
-        .pricing-price-block { margin-bottom: 6px; }
-        .pricing-price {
-            font-size: 3rem;
-            font-weight: 900;
-            color: var(--text);
-            line-height: 1;
-            letter-spacing: -.04em;
-        }
-        .pricing-price sup {
-            font-size: 1.2rem;
-            vertical-align: super;
-            margin-right: 2px;
-        }
-        .pricing-price sub {
-            font-size: .82rem;
-            font-weight: 500;
-            color: var(--text-muted);
-            letter-spacing: 0;
-        }
-        .pricing-note {
-            font-size: .82rem;
-            color: var(--text-muted);
-            margin-bottom: 24px;
-            margin-top: 4px;
-        }
-
-        .pricing-divider { border: none; border-top: 1px solid var(--border); margin: 22px 0; }
-
-        .pricing-list { list-style: none; display: flex; flex-direction: column; gap: 11px; margin-bottom: 32px; }
-        .pricing-list li {
-            display: flex;
-            align-items: flex-start;
-            gap: 10px;
-            font-size: .88rem;
-            line-height: 1.45;
-        }
-        .pi-check { color: var(--teal); font-size: 1rem; flex-shrink: 0; margin-top: 1px; font-weight: 700; }
-        .pi-cross { color: #CBD5E1; font-size: 1rem; flex-shrink: 0; margin-top: 1px; }
-        .pricing-list li.dim { color: var(--text-muted); }
-
-        .btn-pricing {
-            display: block;
-            text-align: center;
-            width: 100%;
-            padding: 14px;
-            border-radius: 12px;
-            font-weight: 700;
-            font-size: .95rem;
-            transition: all .22s;
-            cursor: pointer;
-            border: none;
-        }
-        .btn-pricing-outline {
-            background: transparent;
-            color: var(--teal);
-            border: 2px solid var(--teal);
-        }
-        .btn-pricing-outline:hover { background: var(--teal-light); transform: translateY(-1px); }
-        .btn-pricing-filled {
-            background: var(--teal);
-            color: white;
-            box-shadow: 0 4px 14px rgba(0,137,123,.35);
-        }
-        .btn-pricing-filled:hover { background: var(--teal-dark); transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,137,123,.45); }
-
-        .pricing-footer-note {
-            text-align: center;
-            margin-top: 24px;
-            font-size: .83rem;
-            color: var(--text-muted);
-        }
 
         /* ============================================
            FOR WHO
@@ -980,7 +841,6 @@
             <ul class="nav-links">
                 <li><a href="#funciones">Funciones</a></li>
                 <li><a href="#como-funciona">Cómo funciona</a></li>
-                <li><a href="#precios">Planes</a></li>
             </ul>
             <div class="nav-actions">
                 <a href="login.html" class="btn-nav-ya-tengo">Ya tengo cuenta</a>
@@ -1159,8 +1019,7 @@
                 </div>
             </div>
 
-            <div class="feat-card premium">
-                <div class="feat-premium-badge">⭐ Premium</div>
+            <div class="feat-card">
                 <span class="feat-icon">👥</span>
                 <div class="feat-title">Co-cuidadores</div>
                 <div class="feat-desc">
@@ -1179,8 +1038,7 @@
                 </div>
             </div>
 
-            <div class="feat-card premium">
-                <div class="feat-premium-badge">⭐ Premium</div>
+            <div class="feat-card">
                 <span class="feat-icon">📊</span>
                 <div class="feat-title">Reportes y Exportación</div>
                 <div class="feat-desc">
@@ -1240,68 +1098,7 @@
     </div>
 </section>
 
-<!-- ================================================
-     PRICING
-================================================ -->
-<section class="section" id="precios">
-    <div class="container text-center">
-        <span class="section-tag">Planes</span>
-        <h2 class="section-title">Simple y transparente</h2>
-        <p class="section-subtitle">
-            Empezá gratis y expandí cuando lo necesites.
-        </p>
 
-        <div class="pricing-grid">
-
-            <!-- Free -->
-            <div class="pricing-card">
-                <div class="pricing-plan-name">🆓 Plan Gratuito</div>
-                <div class="pricing-price-block">
-                    <div class="pricing-price">$0<sub>/mes</sub></div>
-                </div>
-                <div class="pricing-note">Para empezar sin compromiso</div>
-                <hr class="pricing-divider">
-                <ul class="pricing-list">
-                    <li><span class="pi-check">✓</span> Hasta 4 medicamentos registrados</li>
-                    <li><span class="pi-check">✓</span> Hasta 3 citas médicas agendadas</li>
-                    <li><span class="pi-check">✓</span> Hasta 3 tareas activas</li>
-                    <li><span class="pi-check">✓</span> Hasta 5 contactos de emergencia</li>
-                    <li><span class="pi-check">✓</span> Recordatorios automáticos</li>
-                    <li><span class="pi-check">✓</span> Síntomas y signos vitales</li>
-                    <li class="dim"><span class="pi-cross">✕</span> 1 solo paciente</li>
-                    <li class="dim"><span class="pi-cross">✕</span> Sin co-cuidadores</li>
-                    <li class="dim"><span class="pi-cross">✕</span> Sin reportes PDF</li>
-                </ul>
-                <a href="login.html" class="btn-pricing btn-pricing-outline">Comenzar gratis</a>
-            </div>
-
-            <!-- Premium -->
-            <div class="pricing-card">
-                <div class="pricing-plan-name">👑 Plan Premium</div>
-                <div class="pricing-price-block">
-                    <div class="pricing-price"><sup>$</sup>3.500 <sub>ARS/mes</sub></div>
-                </div>
-                <div class="pricing-note">Todo ilimitado para cuidar sin restricciones</div>
-                <hr class="pricing-divider">
-                <ul class="pricing-list">
-                    <li><span class="pi-check">✓</span> <strong>Medicamentos, citas y tareas ilimitados</strong></li>
-                    <li><span class="pi-check">✓</span> <strong>Múltiples pacientes</strong></li>
-                    <li><span class="pi-check">✓</span> <strong>Co-cuidadores con acceso compartido</strong></li>
-                    <li><span class="pi-check">✓</span> <strong>Reportes en PDF</strong></li>
-                    <li><span class="pi-check">✓</span> <strong>Google Calendar integrado</strong></li>
-                    <li><span class="pi-check">✓</span> <strong>Contactos ilimitados</strong></li>
-                    <li><span class="pi-check">✓</span> Historial completo de administración</li>
-                </ul>
-                <a href="login.html" class="btn-pricing btn-pricing-filled">Empezar con Premium →</a>
-            </div>
-
-        </div>
-
-        <p class="pricing-footer-note">
-            💳 Pago seguro con MercadoPago &nbsp;·&nbsp; Se renueva automáticamente &nbsp;·&nbsp; Gestioná tu plan desde tu cuenta de MercadoPago
-        </p>
-    </div>
-</section>
 
 <!-- ================================================
      FOR WHO
@@ -1372,7 +1169,7 @@
 <section class="cta-section">
     <div class="container">
         <div class="cta-inner">
-            <div class="cta-eyebrow">✨ Plan gratuito disponible &nbsp;·&nbsp; Acceso inmediato &nbsp;·&nbsp; Funciona en cualquier dispositivo</div>
+            <div class="cta-eyebrow">✨ Acceso inmediato &nbsp;·&nbsp; Completamente gratuito &nbsp;·&nbsp; Funciona en cualquier dispositivo</div>
             <h2 class="cta-title">Empezá hoy.<br>Tu familia lo va a agradecer.</h2>
             <p class="cta-subtitle">
                 Cuidar es el acto de amor más exigente que existe.
@@ -1382,7 +1179,7 @@
                 <a href="login.html" class="btn-white">Crear cuenta gratis →</a>
                 <a href="login.html" class="btn-ghost-white">Ya tengo cuenta</a>
             </div>
-            <p class="cta-microcopy">Acceso inmediato &nbsp;&middot;&nbsp; Plan gratuito disponible &nbsp;&middot;&nbsp; Compatible con todos los dispositivos</p>
+            <p class="cta-microcopy">Acceso inmediato &nbsp;&middot;&nbsp; Completamente gratuito &nbsp;&middot;&nbsp; Compatible con todos los dispositivos</p>
         </div>
     </div>
 </section>
@@ -1407,7 +1204,6 @@
                     <li><a href="login.html">Iniciar sesión</a></li>
                     <li><a href="login.html">Registrarse gratis</a></li>
                     <li><a href="#funciones">Funciones</a></li>
-                    <li><a href="#precios">Planes</a></li>
                 </ul>
             </div>
             <div>
