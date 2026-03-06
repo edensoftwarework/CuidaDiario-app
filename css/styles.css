@@ -974,19 +974,23 @@ body {
     padding: 12px 24px;
     cursor: pointer;
     transition: var(--transition);
-    font-weight: 500;
+    font-weight: 600;
+    font-size: 1rem;
     color: var(--text-secondary);
     border-bottom: 3px solid transparent;
+    border-radius: 6px 6px 0 0;
     white-space: nowrap;
 }
 
 .tab-btn:hover {
     color: var(--primary-color);
+    background: rgba(102, 126, 234, 0.06);
 }
 
 .tab-btn.active {
     color: var(--primary-color);
     border-bottom-color: var(--primary-color);
+    background: rgba(102, 126, 234, 0.1);
 }
 
 .tab-content {
@@ -1775,8 +1779,8 @@ body {
     }
     
     .tab-btn {
-        padding: 10px 15px;
-        font-size: 0.9rem;
+        padding: 11px 18px;
+        font-size: 1rem;
     }
     
     .filter-buttons {
@@ -2189,6 +2193,13 @@ body {
 .toast-body { flex: 1; }
 .toast-close { background: none; border: none; color: rgba(255,255,255,0.7); cursor: pointer; font-size: 1rem; padding: 0; line-height: 1; }
 .toast-close:hover { color: white; }
+
+/* ===========================================
+   ONBOARDING — utilidades
+   =========================================== */
+/* Mostrar solo en móvil dentro del tutorial */
+.onb-mobile-only { display: none; }
+@media (max-width: 768px) { .onb-mobile-only { display: block; } }
 
 /* ===========================================
    AVISO DE COOKIES

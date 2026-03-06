@@ -69,10 +69,10 @@
                 <ul class="nav-menu" id="navMenu">
                     <li><a href="#dashboard" class="nav-link active" data-section="dashboard">Inicio</a></li>
                     <li><a href="#medicamentos" class="nav-link" data-section="medicamentos">Medicamentos</a></li>
-                    <li><a href="#citas" class="nav-link" data-section="citas">Citas</a></li>
                     <li><a href="#sintomas" class="nav-link" data-section="sintomas">Síntomas</a></li>
-                    <li><a href="#tareas" class="nav-link" data-section="tareas">Tareas</a></li>
                     <li><a href="#contactos" class="nav-link" data-section="contactos">Contactos</a></li>
+                    <li><a href="#tareas" class="nav-link" data-section="tareas">Tareas</a></li>
+                    <li><a href="#citas" class="nav-link" data-section="citas">Citas</a></li>
                     <li><a href="#reportes" class="nav-link" data-section="reportes">Reportes</a></li>
                     <li><a href="pages/about.html" class="nav-link">Nosotros</a></li>
                     <li class="nav-menu-logout-item">
@@ -1053,43 +1053,86 @@
     <div class="modal" id="onboardingModal" style="z-index:10010;">
         <div class="modal-content" style="max-width:420px;padding:0;overflow:hidden;">
             <div style="height:4px;background:#e8eaf0;">
-                <div id="onbProgressBar" style="height:100%;width:20%;background:linear-gradient(135deg,#667eea,#764ba2);transition:width 0.35s ease;"></div>
+                <div id="onbProgressBar" style="height:100%;width:14.28%;background:linear-gradient(135deg,#667eea,#764ba2);transition:width 0.35s ease;"></div>
             </div>
-            <!-- Paso 1 -->
+
+            <!-- Paso 1: Bienvenida -->
             <div class="onb-step" id="onbStep1" style="padding:36px 28px 28px;text-align:center;">
                 <div style="font-size:3.5rem;margin-bottom:12px;">👋</div>
                 <h2 style="margin-bottom:10px;font-size:1.35rem;">¡Bienvenido/a a CuidaDiario!</h2>
-                <p style="color:var(--text-secondary);line-height:1.65;font-size:0.93rem;margin-bottom:24px;">La app pensada para organizar el cuidado de tus seres queridos.<br>Te mostramos las funciones principales en 4 pasos rápidos.</p>
+                <p style="color:var(--text-secondary);line-height:1.65;font-size:0.93rem;margin-bottom:24px;">La app pensada para organizar el cuidado de tus seres queridos con tranquilidad.<br><br>Te mostramos todo en unos pasos rápidos.</p>
                 <button onclick="onboardingNext()" class="btn-primary" style="width:100%;padding:13px;">Empezar →</button>
-                <button onclick="skipOnboarding()" style="margin-top:12px;background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:0.83rem;width:100%;">Saltar introducción</button>
             </div>
-            <!-- Paso 2 -->
+
+            <!-- Paso 2: Las 7 secciones -->
             <div class="onb-step" id="onbStep2" style="display:none;padding:36px 28px 28px;text-align:center;">
+                <div style="font-size:3rem;margin-bottom:10px;">🗂️</div>
+                <h2 style="margin-bottom:10px;font-size:1.35rem;">7 secciones principales</h2>
+                <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:16px;">La app está organizada en estas secciones:</p>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;text-align:left;margin-bottom:22px;">
+                    <div style="background:var(--bg-secondary);border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:8px;font-size:0.88rem;"><span style="font-size:1.2rem;">🏠</span><span><strong>Inicio</strong></span></div>
+                    <div style="background:var(--bg-secondary);border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:8px;font-size:0.88rem;"><span style="font-size:1.2rem;">💊</span><span><strong>Medicamentos</strong></span></div>
+                    <div style="background:var(--bg-secondary);border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:8px;font-size:0.88rem;"><span style="font-size:1.2rem;">🩺</span><span><strong>Síntomas</strong></span></div>
+                    <div style="background:var(--bg-secondary);border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:8px;font-size:0.88rem;"><span style="font-size:1.2rem;">👥</span><span><strong>Contactos</strong></span></div>
+                    <div style="background:var(--bg-secondary);border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:8px;font-size:0.88rem;"><span style="font-size:1.2rem;">✅</span><span><strong>Tareas</strong></span></div>
+                    <div style="background:var(--bg-secondary);border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:8px;font-size:0.88rem;"><span style="font-size:1.2rem;">📅</span><span><strong>Citas</strong></span></div>
+                    <div style="background:var(--bg-secondary);border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:8px;font-size:0.88rem;grid-column:1/-1;"><span style="font-size:1.2rem;">📊</span><span><strong>Reportes</strong></span></div>
+                </div>
+                <button onclick="onboardingNext()" class="btn-primary" style="width:100%;padding:13px;">Siguiente →</button>
+            </div>
+
+            <!-- Paso 3: Cómo navegar -->
+            <div class="onb-step" id="onbStep3" style="display:none;padding:36px 28px 28px;text-align:center;">
+                <div style="font-size:3rem;margin-bottom:10px;">🧭</div>
+                <h2 style="margin-bottom:10px;font-size:1.35rem;">Cómo moverte por la app</h2>
+                <p style="color:var(--text-secondary);line-height:1.65;font-size:0.93rem;margin-bottom:14px;">Usá las <strong>flechas</strong> en la parte inferior para pasar de una sección a otra:</p>
+                <div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:18px;">
+                    <div style="background:#667eea;border-radius:50%;width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-size:1.3rem;color:#fff;box-shadow:0 2px 8px rgba(102,126,234,0.4);">←</div>
+                    <span style="font-size:0.85rem;color:var(--text-secondary);">anterior / siguiente</span>
+                    <div style="background:#667eea;border-radius:50%;width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-size:1.3rem;color:#fff;box-shadow:0 2px 8px rgba(102,126,234,0.4);">→</div>
+                </div>
+                <!-- Solo visible en celulares -->
+                <div class="onb-mobile-only" style="background:var(--bg-secondary);border-radius:12px;padding:14px 16px;margin-bottom:18px;">
+                    <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:10px;">También podés usar el <strong>menú ☰</strong> (arriba a la izquierda) para ver todas las secciones de un vistazo:</p>
+                    <div style="display:flex;flex-direction:column;gap:4px;align-items:center;">
+                        <div style="width:28px;height:3px;background:#667eea;border-radius:2px;"></div>
+                        <div style="width:28px;height:3px;background:#667eea;border-radius:2px;"></div>
+                        <div style="width:28px;height:3px;background:#667eea;border-radius:2px;"></div>
+                    </div>
+                </div>
+                <button onclick="onboardingNext()" class="btn-primary" style="width:100%;padding:13px;">Siguiente →</button>
+            </div>
+
+            <!-- Paso 4: Medicamentos -->
+            <div class="onb-step" id="onbStep4" style="display:none;padding:36px 28px 28px;text-align:center;">
                 <div style="font-size:3.5rem;margin-bottom:12px;">💊</div>
                 <h2 style="margin-bottom:10px;font-size:1.35rem;">Medicamentos y recordatorios</h2>
                 <p style="color:var(--text-secondary);line-height:1.65;font-size:0.93rem;margin-bottom:24px;">Registrá los medicamentos con su dosis y frecuencia. Activá el recordatorio y recibirás una notificación push automáticamente en tu celular a la hora exacta.</p>
                 <button onclick="onboardingNext()" class="btn-primary" style="width:100%;padding:13px;">Siguiente →</button>
             </div>
-            <!-- Paso 3 -->
-            <div class="onb-step" id="onbStep3" style="display:none;padding:36px 28px 28px;text-align:center;">
+
+            <!-- Paso 5: Citas y tareas -->
+            <div class="onb-step" id="onbStep5" style="display:none;padding:36px 28px 28px;text-align:center;">
                 <div style="font-size:3.5rem;margin-bottom:12px;">📅</div>
                 <h2 style="margin-bottom:10px;font-size:1.35rem;">Citas y tareas de cuidado</h2>
                 <p style="color:var(--text-secondary);line-height:1.65;font-size:0.93rem;margin-bottom:24px;">Agendá citas médicas con aviso anticipado y registrá las tareas de cuidado diarias como alimentación, higiene o ejercicio. Todo con recordatorio automático.</p>
                 <button onclick="onboardingNext()" class="btn-primary" style="width:100%;padding:13px;">Siguiente →</button>
             </div>
-            <!-- Paso 4 -->
-            <div class="onb-step" id="onbStep4" style="display:none;padding:36px 28px 28px;text-align:center;">
+
+            <!-- Paso 6: Síntomas y signos vitales -->
+            <div class="onb-step" id="onbStep6" style="display:none;padding:36px 28px 28px;text-align:center;">
                 <div style="font-size:3.5rem;margin-bottom:12px;">🩺</div>
                 <h2 style="margin-bottom:10px;font-size:1.35rem;">Síntomas y signos vitales</h2>
                 <p style="color:var(--text-secondary);line-height:1.65;font-size:0.93rem;margin-bottom:24px;">Registrá síntomas con nivel de intensidad y mediciones como presión arterial, glucosa, temperatura, frecuencia cardíaca y más. Un historial completo para compartir con el médico en cada consulta.</p>
                 <button onclick="onboardingNext()" class="btn-primary" style="width:100%;padding:13px;">Siguiente →</button>
             </div>
-            <!-- Paso 5 -->
-            <div class="onb-step" id="onbStep5" style="display:none;padding:36px 28px 28px;text-align:center;">
+
+            <!-- Paso 7: Todo listo -->
+            <div class="onb-step" id="onbStep7" style="display:none;padding:36px 28px 28px;text-align:center;">
                 <div style="font-size:3.5rem;margin-bottom:12px;">🌟</div>
-                <h2 style="margin-bottom:10px;font-size:1.35rem;">¡Todo listo!</h2>
-                <p style="color:var(--text-secondary);line-height:1.65;font-size:0.93rem;margin-bottom:24px;">Ya podés empezar a usar CuidaDiario. Si tenés dudas o sugerencias, escribinos a <a href="mailto:edensoftwarework@gmail.com" style="color:#667eea;">edensoftwarework@gmail.com</a></p>
-                <button onclick="skipOnboarding()" class="btn-primary" style="width:100%;padding:13px;background:linear-gradient(135deg,#43c6ac,#191654);">¡Comenzar ahora!</button>
+                <h2 style="margin-bottom:10px;font-size:1.35rem;">¡Todo listo para empezar!</h2>
+                <p style="color:var(--text-secondary);line-height:1.65;font-size:0.93rem;margin-bottom:24px;">Ya podés comenzar a usar CuidaDiario. Si tenés dudas o sugerencias, escribinos a <a href="mailto:edensoftwarework@gmail.com" style="color:#667eea;">edensoftwarework@gmail.com</a></p>
+                <button onclick="skipOnboarding()" class="btn-primary" style="width:100%;padding:13px;background:linear-gradient(135deg,#43c6ac,#191654);">¡Comenzar ahora! 🚀</button>
             </div>
         </div>
     </div>

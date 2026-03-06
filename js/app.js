@@ -233,14 +233,14 @@ async function _syncMPActiveSubscription() {
 }
 
 // ========== NAVEGADOR DE SECCIONES (flechas) ==========
-const SECTIONS_ORDER  = ['dashboard','medicamentos','citas','sintomas','tareas','contactos','reportes'];
+const SECTIONS_ORDER  = ['dashboard','medicamentos','sintomas','contactos','tareas','citas','reportes'];
 const SECTIONS_LABELS = {
     dashboard:   'Inicio',
     medicamentos:'Medicamentos',
-    citas:       'Citas',
     sintomas:    'Síntomas',
-    tareas:      'Tareas',
     contactos:   'Contactos',
+    tareas:      'Tareas',
+    citas:       'Citas',
     reportes:    'Reportes'
 };
 
@@ -716,14 +716,11 @@ async function loadMedicamentos() {
 }
 
 async function loadHistorialMedicamentos() {
-    let isPremium = Storage.getPremiumStatus();
-    if (!isPremium && await isViewingSharedPatient()) isPremium = true;
-    const LIMIT_FREE = 5;
     const LIMIT_PREMIUM = 50;
 
     document.getElementById('medHistorial').style.display = 'block';
     const historialData = await Storage.getHistorialMedicamentos();
-    const historial = historialData.slice(0, isPremium ? LIMIT_PREMIUM : LIMIT_FREE);
+    const historial = historialData.slice(0, LIMIT_PREMIUM);
     const container = document.getElementById('medHistorialList');
 
     if (historial.length === 0) {
@@ -741,14 +738,6 @@ async function loadHistorialMedicamentos() {
             <button class="btn-icon btn-historial-delete" onclick="deleteHistorialEntry(${h.id})" title="Eliminar registro">🗑️</button>
         </div>
     `).join('');
-
-    // Si es free y hay más registros de los que se muestran, avisar
-    if (!isPremium && historialData.length > LIMIT_FREE) {
-        container.innerHTML += `
-            <div class="locked-data-banner" style="margin-top:10px;" onclick="showPremiumModal()">
-                🔒 Hay ${historialData.length - LIMIT_FREE} registros más. <span style="text-decoration:underline;cursor:pointer;">Hazte Premium</span> para ver el historial completo.
-            </div>`;
-    }
 }
 
 function formatFrecuenciaMed(med) {
@@ -1289,7 +1278,7 @@ async function loadSintomas() {
 
 async function renderSintomasList() {
     const sintomas = await Storage.getSintomas();
-    const sintomasRecientes = sintomas.slice(-30).reverse();
+    const sintomasRecientes = sintomas.slice(0, 30);
     const container = document.getElementById('sintomasList');
     
     if (sintomas.length === 0) {
@@ -1358,7 +1347,7 @@ async function updateSignosVitales() {
 
 function renderSignosHistorial(signos) {
     const container = document.getElementById('signosHistorialList');
-    const ordenados = signos.slice(-20).reverse();
+    const ordenados = signos.slice(0, 30);
     
     if (ordenados.length === 0) {
         container.innerHTML = '<p class="empty-state">No hay signos vitales registrados</p>';
@@ -1517,7 +1506,7 @@ async function saveSintoma(event) {
     event.preventDefault();
     
     const sintoma = {
-        fecha: document.getElementById('sintomaFecha').value,
+        fecha: new Date(document.getElementById('sintomaFecha').value).toISOString(),
         tipo: document.getElementById('sintomaTipo').value,
         intensidad: parseInt(document.getElementById('sintomaIntensidad').value),
         estadoAnimo: document.getElementById('sintomaEstadoAnimo').value,
@@ -1636,7 +1625,7 @@ async function saveSigno(event) {
     const tipo = document.getElementById('signoTipo').value;
     const signo = {
         tipo: tipo,
-        fecha: document.getElementById('signoFecha').value,
+        fecha: new Date(document.getElementById('signoFecha').value).toISOString(),
         notas: document.getElementById('signoNotas').value
     };
     
@@ -2616,7 +2605,7 @@ window.cerrarA2HSBanner = cerrarA2HSBanner;
 
 // ========== ONBOARDING (PRIMER USO) ==========
 const ONBOARDING_KEY = 'cuidadiario_onboarding_done';
-const ONBOARDING_STEPS = 5;
+const ONBOARDING_STEPS = 7;
 let _onbStep = 1;
 
 function showOnboarding() {

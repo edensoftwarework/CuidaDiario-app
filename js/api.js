@@ -270,7 +270,7 @@ const API = {
         const url = paciente_id
             ? `${this.BASE_URL}/api/sintomas?paciente_id=${paciente_id}`
             : `${this.BASE_URL}/api/sintomas`;
-        const response = await fetch(url, { headers: this.getHeaders() });
+        const response = await fetch(url, { headers: this.getHeaders(), cache: 'no-store' });
         return this.handleResponse(response);
     },
     
@@ -356,7 +356,7 @@ const API = {
         const url = paciente_id
             ? `${this.BASE_URL}/api/signos-vitales?paciente_id=${paciente_id}`
             : `${this.BASE_URL}/api/signos-vitales`;
-        const response = await fetch(url, { headers: this.getHeaders() });
+        const response = await fetch(url, { headers: this.getHeaders(), cache: 'no-store' });
         return this.handleResponse(response);
     },
 
