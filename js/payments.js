@@ -23,8 +23,8 @@ const Payments = {
     },
 
     prices: {
-        ARS: 3500,
-        USD: 3
+        ARS: 1500,
+        USD: 1
     },
 
     /**
