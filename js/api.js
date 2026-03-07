@@ -583,6 +583,15 @@ const API = {
         return this.handleResponse(response);
     },
 
+    async updateNota(id, data) {
+        const response = await fetch(`${this.BASE_URL}/api/notas/${id}`, {
+            method: 'PATCH',
+            headers: this.getHeaders(),
+            body: JSON.stringify(data)
+        });
+        return this.handleResponse(response);
+    },
+
     /**
      * Lista los co-cuidadores de un paciente (solo el dueño puede listarlos).
      * @param {number} pacienteId

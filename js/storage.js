@@ -561,6 +561,16 @@ const Storage = {
         }
     },
 
+    async updateNota(id, data) {
+        try {
+            return await API.updateNota(id, data);
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Error al actualizar nota: ' + error.message);
+            throw error;
+        }
+    },
+
     // ========== EXPORTAR DATOS ==========
     async exportData() {
         try {

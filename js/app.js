@@ -746,6 +746,7 @@ async function loadHistorialMedicamentos() {
 
 // ========== NOTAS ==========
 let editingNotaId = null;
+let _notasCache = [];
 
 const NOTA_COLORS = [
     { id: 'amarillo', label: 'Amarillo', bg: '#fff9c4', border: '#f9a825' },
@@ -774,6 +775,7 @@ async function loadNotas() {
 
 async function renderNotasBoard() {
     const notas = await Storage.getNotas();
+    _notasCache = notas;
     const container = document.getElementById('notasBoard');
     if (!container) return;
 
@@ -794,46 +796,86 @@ async function renderNotasBoard() {
             const remDate = new Date(nota.recordatorio);
             const isPast = remDate < now;
             const dateStr = remDate.toLocaleString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-            reminderBadge = `<div class="nota-reminder ${isPast ? 'nota-reminder-past' : ''}">
-                🔔 ${dateStr}${isPast ? ' (vencido)' : ''}
-            </div>`;
+            reminderBadge = `<div class="nota-reminder ${isPast ? 'nota-reminder-past' : ''}">🔔 ${dateStr}${isPast ? ' (vencido)' : ''}</div>`;
         }
-        const preview = (nota.contenido || '').length > 120
-            ? (nota.contenido || '').substring(0, 120) + '…'
-            : (nota.contenido || '');
+        const hasContent = (nota.contenido || '').trim().length > 0;
+        const safeContenido = hasContent
+            ? (nota.contenido || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            : '';
         return `
         <div class="nota-card" style="background:${color.bg};border-left:4px solid ${color.border};" id="nota-${nota.id}">
-            <div class="nota-card-header">
+            <div class="nota-card-header" onclick="toggleNota('${nota.id}')">
                 <h4 class="nota-titulo">${nota.titulo || 'Sin título'}</h4>
-                <button class="btn-icon nota-delete" onclick="deleteNota('${nota.id}')" title="Eliminar nota">🗑️</button>
+                <div class="nota-card-actions">
+                    <button class="btn-icon nota-edit" onclick="event.stopPropagation();openNotaModal('${nota.id}')" title="Editar nota">✏️</button>
+                    <button class="btn-icon nota-delete" onclick="event.stopPropagation();deleteNota('${nota.id}')" title="Eliminar nota">🗑️</button>
+                    ${hasContent ? '<span class="nota-chevron">▼</span>' : ''}
+                </div>
             </div>
-            ${preview ? `<p class="nota-contenido">${preview}</p>` : ''}
-            ${reminderBadge}
-            <div class="nota-fecha">${formatDateTime(nota.created_at || nota.fecha)}</div>
+            <div class="nota-meta">
+                ${reminderBadge}
+                <div class="nota-fecha">📅 Creada: ${formatDateTime(nota.created_at || nota.fecha)}</div>
+            </div>
+            ${hasContent ? `<div class="nota-contenido">${safeContenido}</div>` : ''}
         </div>`;
     }).join('');
 }
 
-async function openNotaModal() {
+function toggleNota(id) {
+    const card = document.getElementById(`nota-${id}`);
+    if (!card) return;
+    const nota = _notasCache.find(n => String(n.id) === String(id));
+    if (!nota || !(nota.contenido || '').trim()) return;
+    card.classList.toggle('expanded');
+}
+
+async function openNotaModal(id = null) {
     if (!requirePaciente()) return;
     if (await blockIfSharedPatient()) return;
     const limits = await Storage.checkLimits();
-    if (!limits.premium && limits.notas.exceeded) {
-        showPremiumModal();
-        return;
+    const titleEl = document.getElementById('notaModalTitle');
+    const submitBtn = document.getElementById('notaModalSubmitBtn');
+
+    if (id) {
+        editingNotaId = String(id);
+        const nota = _notasCache.find(n => String(n.id) === String(id));
+        if (!nota) return;
+        if (titleEl) titleEl.textContent = '✏️ Editar Nota';
+        if (submitBtn) submitBtn.textContent = 'Guardar cambios';
+        document.getElementById('notaForm').reset();
+        document.getElementById('notaTitulo').value = nota.titulo || '';
+        document.getElementById('notaContenido').value = nota.contenido || '';
+        if (nota.recordatorio) {
+            const d = new Date(nota.recordatorio);
+            const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+            document.getElementById('notaRecordatorio').value = local;
+        }
+        document.getElementById('notaColorSelector').innerHTML = NOTA_COLORS.map(c => `
+            <label class="nota-color-option" style="background:${c.bg};border:2px solid ${c.border};">
+                <input type="radio" name="notaColor" value="${c.id}" ${c.id === (nota.color || 'amarillo') ? 'checked' : ''}>
+                <span>${c.label}</span>
+            </label>`).join('');
+    } else {
+        if (!limits.premium && limits.notas.exceeded) {
+            showPremiumModal();
+            return;
+        }
+        editingNotaId = null;
+        if (titleEl) titleEl.textContent = '📝 Nueva Nota';
+        if (submitBtn) submitBtn.textContent = 'Guardar Nota';
+        document.getElementById('notaForm').reset();
+        document.getElementById('notaColorSelector').innerHTML = NOTA_COLORS.map(c => `
+            <label class="nota-color-option" style="background:${c.bg};border:2px solid ${c.border};">
+                <input type="radio" name="notaColor" value="${c.id}" ${c.id === 'amarillo' ? 'checked' : ''}>
+                <span>${c.label}</span>
+            </label>`).join('');
     }
-    editingNotaId = null;
-    document.getElementById('notaForm').reset();
-    document.getElementById('notaColorSelector').innerHTML = NOTA_COLORS.map(c => `
-        <label class="nota-color-option" style="background:${c.bg};border:2px solid ${c.border};">
-            <input type="radio" name="notaColor" value="${c.id}" ${c.id === 'amarillo' ? 'checked' : ''}>
-            <span>${c.label}</span>
-        </label>`).join('');
     document.getElementById('notaModal').classList.add('active');
 }
 
 function closeNotaModal() {
     document.getElementById('notaModal').classList.remove('active');
+    editingNotaId = null;
 }
 
 async function saveNota(event) {
@@ -844,25 +886,28 @@ async function saveNota(event) {
     const color = colorSelected ? colorSelected.value : 'amarillo';
     const recordatorioRaw = document.getElementById('notaRecordatorio').value;
     const recordatorio = recordatorioRaw ? new Date(recordatorioRaw).toISOString() : null;
-
     const nota = { titulo, contenido, color, recordatorio };
-    await Storage.addNota(nota);
 
-    // Programar notificación local si hay recordatorio futuro
-    if (recordatorio) {
-        const msUntil = new Date(recordatorio).getTime() - Date.now();
-        if (msUntil > 0 && msUntil < 7 * 24 * 60 * 60 * 1000) {
-            setTimeout(() => {
-                if (typeof Notifications !== 'undefined') {
-                    Notifications.show(`📝 Recordatorio: ${titulo}`, { body: contenido || 'Tenés una nota con recordatorio.' });
-                }
-            }, msUntil);
+    const wasEditing = !!editingNotaId;
+    if (editingNotaId) {
+        await Storage.updateNota(editingNotaId, nota);
+    } else {
+        await Storage.addNota(nota);
+        if (recordatorio) {
+            const msUntil = new Date(recordatorio).getTime() - Date.now();
+            if (msUntil > 0 && msUntil < 7 * 24 * 60 * 60 * 1000) {
+                setTimeout(() => {
+                    if (typeof Notifications !== 'undefined') {
+                        Notifications.show(`📝 Recordatorio: ${titulo}`, { body: contenido || 'Tenés una nota con recordatorio.' });
+                    }
+                }, msUntil);
+            }
         }
     }
 
     closeNotaModal();
     await loadNotas();
-    showToast('✅ Nota guardada', 'success');
+    showToast(wasEditing ? '✅ Nota actualizada' : '✅ Nota guardada', 'success');
 }
 
 async function deleteNota(id) {
@@ -2737,7 +2782,7 @@ window.cerrarA2HSBanner = cerrarA2HSBanner;
 
 // ========== ONBOARDING (PRIMER USO) ==========
 const ONBOARDING_KEY = 'cuidadiario_onboarding_done';
-const ONBOARDING_STEPS = 7;
+const ONBOARDING_STEPS = 8;
 let _onbStep = 1;
 
 function showOnboarding() {
@@ -3232,6 +3277,7 @@ window.openNotaModal = openNotaModal;
 window.closeNotaModal = closeNotaModal;
 window.saveNota = saveNota;
 window.deleteNota = deleteNota;
+window.toggleNota = toggleNota;
 window.openMedicamentoModal = openMedicamentoModal;
 window.closeMedicamentoModal = closeMedicamentoModal;
 window.editMedicamento = editMedicamento;

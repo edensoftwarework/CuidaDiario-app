@@ -643,7 +643,7 @@
     <div id="notaModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h3>📝 Nueva Nota</h3>
+                <h3 id="notaModalTitle">📝 Nueva Nota</h3>
                 <button class="modal-close" onclick="closeNotaModal()">&times;</button>
             </div>
             <form id="notaForm" onsubmit="saveNota(event)">
@@ -666,7 +666,7 @@
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="btn-secondary" onclick="closeNotaModal()">Cancelar</button>
-                    <button type="submit" class="btn-primary">Guardar Nota</button>
+                    <button type="submit" id="notaModalSubmitBtn" class="btn-primary">Guardar Nota</button>
                 </div>
             </form>
         </div>
@@ -1108,7 +1108,7 @@
     <div class="modal" id="onboardingModal" style="z-index:10010;">
         <div class="modal-content" style="max-width:420px;padding:0;overflow:hidden;">
             <div style="height:4px;background:#e8eaf0;">
-                <div id="onbProgressBar" style="height:100%;width:14.28%;background:linear-gradient(135deg,#667eea,#764ba2);transition:width 0.35s ease;"></div>
+                <div id="onbProgressBar" style="height:100%;width:12.5%;background:linear-gradient(135deg,#667eea,#764ba2);transition:width 0.35s ease;"></div>
             </div>
 
             <!-- Paso 1: Bienvenida -->
@@ -1119,19 +1119,20 @@
                 <button onclick="onboardingNext()" class="btn-primary" style="width:100%;padding:13px;">Empezar →</button>
             </div>
 
-            <!-- Paso 2: Las 7 secciones -->
+            <!-- Paso 2: Las 8 secciones -->
             <div class="onb-step" id="onbStep2" style="display:none;padding:36px 28px 28px;text-align:center;">
                 <div style="font-size:3rem;margin-bottom:10px;">🗂️</div>
-                <h2 style="margin-bottom:10px;font-size:1.35rem;">7 secciones principales</h2>
+                <h2 style="margin-bottom:10px;font-size:1.35rem;">8 secciones principales</h2>
                 <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:16px;">La app está organizada en estas secciones:</p>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;text-align:left;margin-bottom:22px;">
                     <div style="background:var(--bg-secondary);border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:8px;font-size:0.88rem;"><span style="font-size:1.2rem;">🏠</span><span><strong>Inicio</strong></span></div>
                     <div style="background:var(--bg-secondary);border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:8px;font-size:0.88rem;"><span style="font-size:1.2rem;">💊</span><span><strong>Medicamentos</strong></span></div>
+                    <div style="background:var(--bg-secondary);border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:8px;font-size:0.88rem;"><span style="font-size:1.2rem;">📝</span><span><strong>Notas</strong></span></div>
                     <div style="background:var(--bg-secondary);border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:8px;font-size:0.88rem;"><span style="font-size:1.2rem;">🩺</span><span><strong>Síntomas</strong></span></div>
                     <div style="background:var(--bg-secondary);border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:8px;font-size:0.88rem;"><span style="font-size:1.2rem;">👥</span><span><strong>Contactos</strong></span></div>
                     <div style="background:var(--bg-secondary);border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:8px;font-size:0.88rem;"><span style="font-size:1.2rem;">✅</span><span><strong>Tareas</strong></span></div>
                     <div style="background:var(--bg-secondary);border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:8px;font-size:0.88rem;"><span style="font-size:1.2rem;">📅</span><span><strong>Citas</strong></span></div>
-                    <div style="background:var(--bg-secondary);border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:8px;font-size:0.88rem;grid-column:1/-1;"><span style="font-size:1.2rem;">📊</span><span><strong>Reportes</strong></span></div>
+                    <div style="background:var(--bg-secondary);border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:8px;font-size:0.88rem;"><span style="font-size:1.2rem;">📊</span><span><strong>Reportes</strong></span></div>
                 </div>
                 <button onclick="onboardingNext()" class="btn-primary" style="width:100%;padding:13px;">Siguiente →</button>
             </div>
@@ -1182,8 +1183,19 @@
                 <button onclick="onboardingNext()" class="btn-primary" style="width:100%;padding:13px;">Siguiente →</button>
             </div>
 
-            <!-- Paso 7: Todo listo -->
+            <!-- Paso 7: Notas y recordatorios -->
             <div class="onb-step" id="onbStep7" style="display:none;padding:36px 28px 28px;text-align:center;">
+                <div style="font-size:3.5rem;margin-bottom:12px;">📝</div>
+                <h2 style="margin-bottom:10px;font-size:1.35rem;">Notas y recordatorios</h2>
+                <p style="color:var(--text-secondary);line-height:1.65;font-size:0.93rem;margin-bottom:16px;">Creá notas de colores en tu tablero personal para no olvidar nada. Cada nota puede tener un recordatorio con fecha y hora para recibir un aviso automático.</p>
+                <div style="background:var(--bg-secondary);border-radius:12px;padding:14px 16px;margin-bottom:20px;text-align:left;">
+                    <p style="font-size:0.85rem;color:var(--text-secondary);margin:0;">💡 <strong>Tocá el título</strong> de una nota para desplegar su contenido. Usá ✏️ para editarla y 🗑️ para eliminarla.</p>
+                </div>
+                <button onclick="onboardingNext()" class="btn-primary" style="width:100%;padding:13px;">Siguiente →</button>
+            </div>
+
+            <!-- Paso 8: Todo listo -->
+            <div class="onb-step" id="onbStep8" style="display:none;padding:36px 28px 28px;text-align:center;">
                 <div style="font-size:3.5rem;margin-bottom:12px;">🌟</div>
                 <h2 style="margin-bottom:10px;font-size:1.35rem;">¡Todo listo para empezar!</h2>
                 <p style="color:var(--text-secondary);line-height:1.65;font-size:0.93rem;margin-bottom:24px;">Ya podés comenzar a usar CuidaDiario. Si tenés dudas o sugerencias, escribinos a <a href="mailto:edensoftwarework@gmail.com" style="color:#667eea;">edensoftwarework@gmail.com</a></p>

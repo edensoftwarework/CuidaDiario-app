@@ -2211,11 +2211,10 @@ body {
 
 .nota-card {
     border-radius: 12px;
-    padding: 16px;
-    min-height: 120px;
+    padding: 14px 16px;
+    overflow: hidden;
     display: flex;
     flex-direction: column;
-    gap: 8px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.08);
     transition: transform 0.15s ease, box-shadow 0.15s ease;
     position: relative;
@@ -2231,6 +2230,15 @@ body {
     justify-content: space-between;
     align-items: flex-start;
     gap: 8px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.nota-card-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
 }
 
 .nota-titulo {
@@ -2240,15 +2248,45 @@ body {
     color: #333;
     flex: 1;
     line-height: 1.35;
+    word-break: break-word;
+    overflow-wrap: break-word;
+}
+
+.nota-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-top: 8px;
 }
 
 .nota-contenido {
+    display: none;
     font-size: 0.88rem;
     color: #555;
-    line-height: 1.5;
-    margin: 0;
-    flex: 1;
+    line-height: 1.55;
+    margin: 10px 0 2px;
+    word-break: break-word;
+    overflow-wrap: break-word;
     white-space: pre-line;
+    overflow: hidden;
+}
+
+.nota-card.expanded .nota-contenido {
+    display: block;
+}
+
+.nota-chevron {
+    font-size: 0.72rem;
+    color: #777;
+    transition: transform 0.2s ease;
+    line-height: 1;
+    padding: 2px 3px;
+    display: inline-block;
+    pointer-events: none;
+}
+
+.nota-card.expanded .nota-chevron {
+    transform: rotate(180deg);
 }
 
 .nota-reminder {
@@ -2259,6 +2297,7 @@ body {
     padding: 4px 8px;
     display: inline-block;
     font-weight: 600;
+    width: fit-content;
 }
 
 .nota-reminder-past {
@@ -2269,18 +2308,17 @@ body {
 .nota-fecha {
     font-size: 0.73rem;
     color: #888;
-    margin-top: auto;
 }
 
-.nota-delete {
-    font-size: 1rem;
-    opacity: 0.5;
+.nota-delete, .nota-edit {
+    font-size: 0.9rem;
+    opacity: 0.45;
     transition: opacity 0.15s;
     flex-shrink: 0;
     padding: 2px 4px;
 }
 
-.nota-delete:hover { opacity: 1; }
+.nota-delete:hover, .nota-edit:hover { opacity: 1; }
 
 .notas-empty {
     grid-column: 1 / -1;
