@@ -462,10 +462,11 @@ const Storage = {
         if (isPremium) return true;
 
         const limits = {
-            medicamentos: 4,
+            medicamentos: 6,
             citas: 3,
             tareas: 3,
-            contactos: 2
+            contactos: 2,
+            notas: 6
         };
 
         return current < (limits[type] || Infinity);
@@ -485,14 +486,15 @@ const Storage = {
             };
         }
 
-        const [medicamentos, citas, tareas, contactos] = await Promise.all([
+        const [medicamentos, citas, tareas, contactos, notas] = await Promise.all([
             this.getMedicamentos(),
             this.getCitas(),
             this.getTareas(),
-            this.getContactos()
+            this.getContactos(),
+            this.getNotas()
         ]);
 
-        const FREE = { medicamentos: 4, citas: 3, tareas: 3, contactos: 2 };
+        const FREE = { medicamentos: 6, citas: 3, tareas: 3, contactos: 2, notas: 6 };
 
         return {
             premium: false,
@@ -519,8 +521,44 @@ const Storage = {
                 max: FREE.contactos,
                 exceeded: contactos.length >= FREE.contactos,
                 locked: Math.max(0, contactos.length - FREE.contactos)
+            },
+            notas: {
+                current: notas.length,
+                max: FREE.notas,
+                exceeded: notas.length >= FREE.notas,
+                locked: 0
             }
         };
+    },
+
+    // ========== NOTAS ==========
+    async getNotas() {
+        try {
+            return await API.getNotas(this.currentPacienteId);
+        } catch (error) {
+            console.error('Error:', error);
+            return [];
+        }
+    },
+
+    async addNota(nota) {
+        try {
+            if (this.currentPacienteId) nota = { ...nota, paciente_id: this.currentPacienteId };
+            return await API.createNota(nota);
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Error al guardar nota: ' + error.message);
+            throw error;
+        }
+    },
+
+    async deleteNota(id) {
+        try {
+            return await API.deleteNota(id);
+        } catch (error) {
+            console.error('Error:', error);
+            throw error;
+        }
     },
 
     // ========== EXPORTAR DATOS ==========

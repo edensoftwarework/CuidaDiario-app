@@ -69,6 +69,7 @@
                 <ul class="nav-menu" id="navMenu">
                     <li><a href="#dashboard" class="nav-link active" data-section="dashboard">Inicio</a></li>
                     <li><a href="#medicamentos" class="nav-link" data-section="medicamentos">Medicamentos</a></li>
+                    <li><a href="#notas" class="nav-link" data-section="notas">Notas</a></li>
                     <li><a href="#sintomas" class="nav-link" data-section="sintomas">Síntomas</a></li>
                     <li><a href="#contactos" class="nav-link" data-section="contactos">Contactos</a></li>
                     <li><a href="#tareas" class="nav-link" data-section="tareas">Tareas</a></li>
@@ -200,7 +201,7 @@
                 </div>
 
                 <div class="limit-warning" id="medLimitWarning" style="display: none;">
-                    &#9888;&#65039; Versión gratuita: máximo 4 medicamentos. <a href="#premium" onclick="showPremiumModal()">Actualiza a Premium</a>
+                    &#9888;&#65039; Versión gratuita: máximo 6 medicamentos. <a href="#premium" onclick="showPremiumModal()">Actualiza a Premium</a>
                 </div>
 
                 <div class="locked-data-banner" id="medLockedBanner" style="display: none;"></div>
@@ -214,6 +215,26 @@
                     <h3>Historial de Administración</h3>
                     <div class="historial-list" id="medHistorialList">
                         <p class="empty-state">No hay registros de administración</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Sección: Notas -->
+            <section id="notas" class="section">
+                <div class="section-header">
+                    <h2>📝 Notas y Recordatorios</h2>
+                    <button class="btn-primary" onclick="openNotaModal()">+ Nueva Nota</button>
+                </div>
+
+                <div class="limit-warning" id="notasLimitWarning" style="display: none;">
+                    &#9888;&#65039; Versión gratuita: máximo 6 notas. <a href="#premium" onclick="showPremiumModal()">Actualiza a Premium</a>
+                </div>
+
+                <!-- Tablero de notas -->
+                <div class="notas-board" id="notasBoard">
+                    <div class="notas-empty">
+                        <div style="font-size:3rem;margin-bottom:12px;">📝</div>
+                        <p>No tenés notas todavía. ¡Creá tu primera nota!</p>
                     </div>
                 </div>
             </section>
@@ -618,6 +639,39 @@
         </div>
     </div>
 
+    <!-- Modal: Nota -->
+    <div id="notaModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>📝 Nueva Nota</h3>
+                <button class="modal-close" onclick="closeNotaModal()">&times;</button>
+            </div>
+            <form id="notaForm" onsubmit="saveNota(event)">
+                <div class="form-group">
+                    <label for="notaTitulo">Título *</label>
+                    <input type="text" id="notaTitulo" required placeholder="Ej: Recordar preguntar al médico...">
+                </div>
+                <div class="form-group">
+                    <label for="notaContenido">Contenido</label>
+                    <textarea id="notaContenido" rows="4" placeholder="Escribí lo que quieras recordar..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Color de la nota</label>
+                    <div id="notaColorSelector" class="nota-color-selector"></div>
+                </div>
+                <div class="form-group">
+                    <label for="notaRecordatorio">Recordatorio (opcional)</label>
+                    <input type="datetime-local" id="notaRecordatorio">
+                    <small style="color:var(--text-secondary);font-size:0.8rem;">Si configurás una fecha/hora, la app te avisará en ese momento.</small>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" onclick="closeNotaModal()">Cancelar</button>
+                    <button type="submit" class="btn-primary">Guardar Nota</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Modal: Síntoma -->
     <div id="sintomaModal" class="modal">
         <div class="modal-content">
@@ -887,6 +941,7 @@
                     <ul>
                         <li>&#10003; <strong>Múltiples pacientes</strong> — gestioná a toda tu familia</li>
                         <li>&#10003; Medicamentos, citas y tareas <strong>ilimitados</strong></li>
+                        <li>&#10003; <strong>Notas ilimitadas</strong> — tu tablero personal sin límites</li>
                         <li>&#10003; Historial completo y <strong>reportes exportables</strong></li>
                         <li>&#10003; Agenda de contactos ampliada</li>
                         <li>&#10003; Exportación de datos en <strong>Excel / CSV</strong></li>

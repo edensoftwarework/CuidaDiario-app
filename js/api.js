@@ -556,6 +556,33 @@ const API = {
         return this.handleResponse(response);
     },
 
+    // ==================== NOTAS ====================
+
+    async getNotas(paciente_id = null) {
+        const url = paciente_id
+            ? `${this.BASE_URL}/api/notas?paciente_id=${paciente_id}`
+            : `${this.BASE_URL}/api/notas`;
+        const response = await fetch(url, { headers: this.getHeaders(), cache: 'no-store' });
+        return this.handleResponse(response);
+    },
+
+    async createNota(data) {
+        const response = await fetch(`${this.BASE_URL}/api/notas`, {
+            method: 'POST',
+            headers: this.getHeaders(),
+            body: JSON.stringify(data)
+        });
+        return this.handleResponse(response);
+    },
+
+    async deleteNota(id) {
+        const response = await fetch(`${this.BASE_URL}/api/notas/${id}`, {
+            method: 'DELETE',
+            headers: this.getHeaders()
+        });
+        return this.handleResponse(response);
+    },
+
     /**
      * Lista los co-cuidadores de un paciente (solo el dueño puede listarlos).
      * @param {number} pacienteId

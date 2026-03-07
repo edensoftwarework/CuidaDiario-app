@@ -2200,6 +2200,139 @@ body {
 .toast-close:hover { color: white; }
 
 /* ===========================================
+   NOTAS BOARD
+   =========================================== */
+.notas-board {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 16px;
+    margin-top: 8px;
+}
+
+.nota-card {
+    border-radius: 12px;
+    padding: 16px;
+    min-height: 120px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    position: relative;
+}
+
+.nota-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.13);
+}
+
+.nota-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.nota-titulo {
+    font-size: 0.97rem;
+    font-weight: 700;
+    margin: 0;
+    color: #333;
+    flex: 1;
+    line-height: 1.35;
+}
+
+.nota-contenido {
+    font-size: 0.88rem;
+    color: #555;
+    line-height: 1.5;
+    margin: 0;
+    flex: 1;
+    white-space: pre-line;
+}
+
+.nota-reminder {
+    font-size: 0.78rem;
+    color: #0277bd;
+    background: rgba(2,119,189,0.1);
+    border-radius: 6px;
+    padding: 4px 8px;
+    display: inline-block;
+    font-weight: 600;
+}
+
+.nota-reminder-past {
+    color: #c62828;
+    background: rgba(198,40,40,0.1);
+}
+
+.nota-fecha {
+    font-size: 0.73rem;
+    color: #888;
+    margin-top: auto;
+}
+
+.nota-delete {
+    font-size: 1rem;
+    opacity: 0.5;
+    transition: opacity 0.15s;
+    flex-shrink: 0;
+    padding: 2px 4px;
+}
+
+.nota-delete:hover { opacity: 1; }
+
+.notas-empty {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 48px 20px;
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+}
+
+/* Selector de color en el modal de nota */
+.nota-color-selector {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 4px;
+}
+
+.nota-color-option {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #444;
+    transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.nota-color-option:hover { transform: scale(1.06); }
+
+.nota-color-option input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.nota-color-option:has(input:checked) {
+    box-shadow: 0 0 0 3px #667eea;
+    transform: scale(1.08);
+}
+
+@media (max-width: 600px) {
+    .notas-board { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+    .nota-color-selector { gap: 7px; }
+    .nota-color-option { padding: 6px 8px; font-size: 0.72rem; }
+}
+
+/* ===========================================
    ONBOARDING — utilidades
    =========================================== */
 /* Mostrar solo en móvil dentro del tutorial */

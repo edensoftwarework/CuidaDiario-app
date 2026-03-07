@@ -233,10 +233,11 @@ async function _syncMPActiveSubscription() {
 }
 
 // ========== NAVEGADOR DE SECCIONES (flechas) ==========
-const SECTIONS_ORDER  = ['dashboard','medicamentos','sintomas','contactos','tareas','citas','reportes'];
+const SECTIONS_ORDER  = ['dashboard','medicamentos','notas','sintomas','contactos','tareas','citas','reportes'];
 const SECTIONS_LABELS = {
     dashboard:   'Inicio',
     medicamentos:'Medicamentos',
+    notas:       'Notas',
     sintomas:    'Síntomas',
     contactos:   'Contactos',
     tareas:      'Tareas',
@@ -346,6 +347,9 @@ async function navigateToSection(sectionId) {
             break;
         case 'medicamentos':
             await loadMedicamentos();
+            break;
+        case 'notas':
+            await loadNotas();
             break;
         case 'citas':
             await loadCitas();
@@ -738,6 +742,134 @@ async function loadHistorialMedicamentos() {
             <button class="btn-icon btn-historial-delete" onclick="deleteHistorialEntry(${h.id})" title="Eliminar registro">🗑️</button>
         </div>
     `).join('');
+}
+
+// ========== NOTAS ==========
+let editingNotaId = null;
+
+const NOTA_COLORS = [
+    { id: 'amarillo', label: 'Amarillo', bg: '#fff9c4', border: '#f9a825' },
+    { id: 'verde',    label: 'Verde',    bg: '#dcedc8', border: '#558b2f' },
+    { id: 'celeste',  label: 'Celeste',  bg: '#e1f5fe', border: '#0277bd' },
+    { id: 'rosa',     label: 'Rosa',     bg: '#fce4ec', border: '#c2185b' },
+    { id: 'lila',     label: 'Lila',     bg: '#ede7f6', border: '#6a1b9a' },
+    { id: 'salmon',   label: 'Salmón',   bg: '#fbe9e7', border: '#bf360c' },
+];
+
+function getNotaColor(colorId) {
+    return NOTA_COLORS.find(c => c.id === colorId) || NOTA_COLORS[0];
+}
+
+async function loadNotas() {
+    const limits = await Storage.checkLimits();
+    const canAdd = limits.premium || !limits.notas.exceeded;
+    const addBtn = document.querySelector('#notas .section-header .btn-primary');
+    if (addBtn) addBtn.style.display = canAdd ? '' : 'none';
+
+    const warning = document.getElementById('notasLimitWarning');
+    if (warning) warning.style.display = limits.notas && limits.notas.exceeded && !limits.premium ? 'block' : 'none';
+
+    await renderNotasBoard();
+}
+
+async function renderNotasBoard() {
+    const notas = await Storage.getNotas();
+    const container = document.getElementById('notasBoard');
+    if (!container) return;
+
+    if (notas.length === 0) {
+        container.innerHTML = `
+            <div class="notas-empty">
+                <div style="font-size:3rem;margin-bottom:12px;">📝</div>
+                <p>No tenés notas todavía. ¡Creá tu primera nota!</p>
+            </div>`;
+        return;
+    }
+
+    const now = new Date();
+    container.innerHTML = notas.map(nota => {
+        const color = getNotaColor(nota.color);
+        let reminderBadge = '';
+        if (nota.recordatorio) {
+            const remDate = new Date(nota.recordatorio);
+            const isPast = remDate < now;
+            const dateStr = remDate.toLocaleString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+            reminderBadge = `<div class="nota-reminder ${isPast ? 'nota-reminder-past' : ''}">
+                🔔 ${dateStr}${isPast ? ' (vencido)' : ''}
+            </div>`;
+        }
+        const preview = (nota.contenido || '').length > 120
+            ? (nota.contenido || '').substring(0, 120) + '…'
+            : (nota.contenido || '');
+        return `
+        <div class="nota-card" style="background:${color.bg};border-left:4px solid ${color.border};" id="nota-${nota.id}">
+            <div class="nota-card-header">
+                <h4 class="nota-titulo">${nota.titulo || 'Sin título'}</h4>
+                <button class="btn-icon nota-delete" onclick="deleteNota('${nota.id}')" title="Eliminar nota">🗑️</button>
+            </div>
+            ${preview ? `<p class="nota-contenido">${preview}</p>` : ''}
+            ${reminderBadge}
+            <div class="nota-fecha">${formatDateTime(nota.created_at || nota.fecha)}</div>
+        </div>`;
+    }).join('');
+}
+
+async function openNotaModal() {
+    if (!requirePaciente()) return;
+    if (await blockIfSharedPatient()) return;
+    const limits = await Storage.checkLimits();
+    if (!limits.premium && limits.notas.exceeded) {
+        showPremiumModal();
+        return;
+    }
+    editingNotaId = null;
+    document.getElementById('notaForm').reset();
+    document.getElementById('notaColorSelector').innerHTML = NOTA_COLORS.map(c => `
+        <label class="nota-color-option" style="background:${c.bg};border:2px solid ${c.border};">
+            <input type="radio" name="notaColor" value="${c.id}" ${c.id === 'amarillo' ? 'checked' : ''}>
+            <span>${c.label}</span>
+        </label>`).join('');
+    document.getElementById('notaModal').classList.add('active');
+}
+
+function closeNotaModal() {
+    document.getElementById('notaModal').classList.remove('active');
+}
+
+async function saveNota(event) {
+    event.preventDefault();
+    const titulo = document.getElementById('notaTitulo').value.trim();
+    const contenido = document.getElementById('notaContenido').value.trim();
+    const colorSelected = document.querySelector('input[name="notaColor"]:checked');
+    const color = colorSelected ? colorSelected.value : 'amarillo';
+    const recordatorioRaw = document.getElementById('notaRecordatorio').value;
+    const recordatorio = recordatorioRaw ? new Date(recordatorioRaw).toISOString() : null;
+
+    const nota = { titulo, contenido, color, recordatorio };
+    await Storage.addNota(nota);
+
+    // Programar notificación local si hay recordatorio futuro
+    if (recordatorio) {
+        const msUntil = new Date(recordatorio).getTime() - Date.now();
+        if (msUntil > 0 && msUntil < 7 * 24 * 60 * 60 * 1000) {
+            setTimeout(() => {
+                if (typeof Notifications !== 'undefined') {
+                    Notifications.show(`📝 Recordatorio: ${titulo}`, { body: contenido || 'Tenés una nota con recordatorio.' });
+                }
+            }, msUntil);
+        }
+    }
+
+    closeNotaModal();
+    await loadNotas();
+    showToast('✅ Nota guardada', 'success');
+}
+
+async function deleteNota(id) {
+    if (confirm('¿Eliminar esta nota?')) {
+        await Storage.deleteNota(id);
+        await loadNotas();
+    }
 }
 
 function formatFrecuenciaMed(med) {
@@ -3096,6 +3228,10 @@ async function savePaciente(event) {
 // ========== EXPORTAR FUNCIONES GLOBALES ==========
 // Estas funciones deben estar disponibles desde HTML
 window.navigateToSection = navigateToSection;
+window.openNotaModal = openNotaModal;
+window.closeNotaModal = closeNotaModal;
+window.saveNota = saveNota;
+window.deleteNota = deleteNota;
 window.openMedicamentoModal = openMedicamentoModal;
 window.closeMedicamentoModal = closeMedicamentoModal;
 window.editMedicamento = editMedicamento;
