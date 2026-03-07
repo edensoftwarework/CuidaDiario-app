@@ -808,7 +808,6 @@ async function renderNotasBoard() {
                 <h4 class="nota-titulo">${nota.titulo || 'Sin título'}</h4>
                 <div class="nota-card-actions">
                     <button class="btn-icon nota-edit" onclick="event.stopPropagation();openNotaModal('${nota.id}')" title="Editar nota">✏️</button>
-                    <button class="btn-icon nota-delete" onclick="event.stopPropagation();deleteNota('${nota.id}')" title="Eliminar nota">🗑️</button>
                     ${hasContent ? '<span class="nota-chevron">▼</span>' : ''}
                 </div>
             </div>
@@ -817,6 +816,9 @@ async function renderNotasBoard() {
                 <div class="nota-fecha">📅 Creada: ${formatDateTime(nota.created_at || nota.fecha)}</div>
             </div>
             ${hasContent ? `<div class="nota-contenido">${safeContenido}</div>` : ''}
+            <div class="nota-card-footer">
+                <button class="btn-icon nota-delete" onclick="deleteNota('${nota.id}')" title="Eliminar nota">🗑️ Eliminar</button>
+            </div>
         </div>`;
     }).join('');
 }

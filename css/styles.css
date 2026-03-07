@@ -2275,20 +2275,6 @@ body {
     display: block;
 }
 
-.nota-chevron {
-    font-size: 0.72rem;
-    color: #777;
-    transition: transform 0.2s ease;
-    line-height: 1;
-    padding: 2px 3px;
-    display: inline-block;
-    pointer-events: none;
-}
-
-.nota-card.expanded .nota-chevron {
-    transform: rotate(180deg);
-}
-
 .nota-reminder {
     font-size: 0.78rem;
     color: #0277bd;
@@ -2319,6 +2305,54 @@ body {
 }
 
 .nota-delete:hover, .nota-edit:hover { opacity: 1; }
+
+.nota-edit {
+    font-size: 1.15rem;
+    opacity: 0.55;
+    padding: 4px 6px;
+}
+
+.nota-edit:hover { opacity: 1; }
+
+.nota-chevron {
+    font-size: 0.95rem;
+    color: #555;
+    transition: transform 0.2s ease;
+    line-height: 1;
+    padding: 4px 5px;
+    display: inline-block;
+    pointer-events: none;
+    font-weight: 700;
+}
+
+.nota-card.expanded .nota-chevron {
+    transform: rotate(180deg);
+}
+
+.nota-card-footer {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(0,0,0,0.08);
+    display: flex;
+    justify-content: flex-end;
+}
+
+.nota-delete {
+    font-size: 0.85rem;
+    color: #c62828;
+    opacity: 0.65;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: opacity 0.15s, background 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.nota-delete:hover {
+    opacity: 1;
+    background: rgba(198,40,40,0.1);
+}
 
 .notas-empty {
     grid-column: 1 / -1;
