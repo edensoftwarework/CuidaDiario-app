@@ -92,6 +92,9 @@
             border: 2px solid #e0e0e0;
             border-radius: 8px;
             font-size: 1rem;
+            line-height: 1.5;
+            box-sizing: border-box;
+            height: 48px;
             transition: border-color 0.3s;
         }
         
@@ -99,6 +102,45 @@
             outline: none;
             border-color: #667eea;
         }
+
+        .pass-wrap {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+        .pass-wrap input {
+            padding-right: 44px;
+            /* Evitar layout shift al cambiar password↔text */
+            line-height: 1.5;
+            box-sizing: border-box;
+            height: 48px;
+        }
+        /* Suprimir el ojo nativo del navegador (Edge/Chrome) */
+        .pass-wrap input::-ms-reveal,
+        .pass-wrap input::-ms-clear,
+        .pass-wrap input::-webkit-contacts-auto-fill-button,
+        .pass-wrap input::-webkit-credentials-auto-fill-button {
+            display: none !important;
+            visibility: hidden;
+            pointer-events: none;
+        }
+        .pass-toggle {
+            position: absolute;
+            right: 0;
+            top: 0;
+            height: 100%;
+            width: 42px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #888;
+            border-radius: 0 8px 8px 0;
+            transition: color .2s;
+        }
+        .pass-toggle:hover { color: #667eea; }
         
         .btn-submit {
             width: 100%;
@@ -187,7 +229,10 @@
                     </div>
                     <div class="form-group">
                         <label for="loginPassword">Contraseña</label>
-                        <input type="password" id="loginPassword" required placeholder="Tu contraseña">
+                        <div class="pass-wrap">
+                            <input type="password" id="loginPassword" required placeholder="Tu contraseña">
+                            <button type="button" class="pass-toggle" onclick="togglePass('loginPassword',this)" title="Mostrar contraseña"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+                        </div>
                     </div>
                     <button type="submit" class="btn-submit" id="btnLogin">Iniciar Sesión</button>
                 </form>
@@ -206,11 +251,17 @@
                     </div>
                     <div class="form-group">
                         <label for="registerPassword">Contraseña</label>
-                        <input type="password" id="registerPassword" required minlength="6" placeholder="Mínimo 6 caracteres">
+                        <div class="pass-wrap">
+                            <input type="password" id="registerPassword" required minlength="6" placeholder="Mínimo 6 caracteres">
+                            <button type="button" class="pass-toggle" onclick="togglePass('registerPassword',this)" title="Mostrar contraseña"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+                        </div>
                     </div>
                     <div class="form-group">
                         <label for="registerPasswordConfirm">Confirmar contraseña</label>
-                        <input type="password" id="registerPasswordConfirm" required minlength="6" placeholder="Repite tu contraseña">
+                        <div class="pass-wrap">
+                            <input type="password" id="registerPasswordConfirm" required minlength="6" placeholder="Repite tu contraseña">
+                            <button type="button" class="pass-toggle" onclick="togglePass('registerPasswordConfirm',this)" title="Mostrar contraseña"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+                        </div>
                     </div>
                     <button type="submit" class="btn-submit" id="btnRegister">Registrarse</button>
                 </form>
@@ -369,6 +420,17 @@
         // Redirigir si ya está autenticado
         if (API.isAuthenticated()) {
             window.location.href = 'index.html';
+        }
+
+        function togglePass(id, btn) {
+            const inp = document.getElementById(id);
+            if (!inp) return;
+            inp.type = inp.type === 'password' ? 'text' : 'password';
+            const vis = inp.type === 'text';
+            btn.innerHTML = vis
+                ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`
+                : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+            btn.title = vis ? 'Ocultar contraseña' : 'Mostrar contraseña';
         }
     </script>
 </body>
