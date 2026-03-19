@@ -61,10 +61,21 @@ const API = {
     // Manejo de errores
     async handleResponse(response) {
         if (response.status === 401) {
-            // Token inválido o expirado
-            this.removeToken();
-            window.location.href = '#login';
-            throw new Error('Sesión expirada. Por favor, inicia sesión nuevamente.');
+            // Si hay token activo → la sesión expiró (token inválido/vencido)
+            // Si NO hay token → es un fallo de credenciales (contraseña incorrecta, etc.)
+            if (this.getToken()) {
+                this.removeToken();
+                window.location.href = '#login';
+                throw new Error('Sesión expirada. Por favor, inicia sesión nuevamente.');
+            } else {
+                // Leer el mensaje de error real que devuelve el backend
+                let msg = 'Email o contraseña incorrectos.';
+                try {
+                    const body = await response.json();
+                    if (body?.error) msg = body.error;
+                } catch (_) {}
+                throw new Error(msg);
+            }
         }
         
         if (!response.ok) {
