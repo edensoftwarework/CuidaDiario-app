@@ -3817,13 +3817,7 @@ async function processOfflineQueue() {
     const failed = [];
     for (const req of queue) {
         try {
-            // Reconstruct headers injecting a fresh token — the stored headers have no Authorization
-            // (the SW strips it intentionally) so we always use the current token, not the expired one.
-            const freshToken = API.getToken();
-            const headers = { ...req.headers };
-            if (freshToken) headers['Authorization'] = `Bearer ${freshToken}`;
-
-            const init = { method: req.method, headers };
+            const init = { method: req.method, headers: req.headers };
             if (req.body) init.body = req.body;
             const response = await fetch(req.url, init);
             if (!response.ok) throw new Error(`HTTP ${response.status}`);

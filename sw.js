@@ -6,20 +6,18 @@
  *  - Cache de assets (soporte offline básico)
  *  - Push Notifications (recordatorios aunque la app esté cerrada)
  *  - Notification click (abre la app o enfoca la pestaña)
- *  - Modo offline completo (v9):
+ *  - Modo offline completo (v7):
  *      · Assets: network-first con fallback a cache
  *      · API GETs: network-first con fallback a cache offline (datos siempre frescos cuando hay red)
  *      · API escrituras (POST/PUT/DELETE): cola de sincronización offline
- *      · Login offline: auto-redirect cuando hay sesión guardada
  */
 
-const CACHE_NAME     = 'cuidadiario-v9';
-const API_CACHE_NAME = 'cuidadiario-api-v9';
+const CACHE_NAME     = 'cuidadiario-v8';
+const API_CACHE_NAME = 'cuidadiario-api-v8';
 
 const ASSETS = [
     '/',
     '/index.html',
-    '/login.html',
     '/css/styles.css',
     '/js/api.js',
     '/js/storage.js',
@@ -219,16 +217,9 @@ async function invalidateApiCache(url) {
  * Para escrituras (POST/PUT/DELETE): intentar red.
  * Si la escritura tiene éxito, invalidar el caché GET del recurso afectado
  * para que el próximo loadXxx() obtenga datos frescos del servidor.
- * Si falla por offline, encolar en localStorage para reintento cuando vuelva la conexión.
- *
- * IMPORTANTE: los headers se guardan sin el Authorization — al reintentar se añade
- * el token fresco del localStorage para evitar que un token caducado bloquee la cola.
+ * Si falla por offline, encolar en IndexedDB para reintento cuando vuelva la conexión.
  */
 async function networkWithOfflineQueue(request) {
-    // Clonar el body ANTES de intentar el fetch (solo se puede leer una vez)
-    let bodyText = '';
-    try { bodyText = await request.clone().text(); } catch {}
-
     try {
         const response = await fetch(request.clone());
         // Invalidar caché GET del recurso afectado para que el próximo load sea fresco
@@ -237,20 +228,18 @@ async function networkWithOfflineQueue(request) {
         }
         return response;
     } catch (err) {
-        // Encolar la solicitud para sync posterior.
-        // Guardamos los headers SIN Authorization para que al reintentar se use el token fresco.
+        // Encolar la solicitud para sync posterior
         try {
-            const safeHeaders = {};
-            for (const [k, v] of request.headers.entries()) {
-                if (k.toLowerCase() !== 'authorization') safeHeaders[k] = v;
-            }
+            const body = await request.clone().text().catch(() => '');
             const queued = {
                 url: request.url,
                 method: request.method,
-                headers: safeHeaders,
-                body: bodyText,
+                headers: Object.fromEntries(request.headers.entries()),
+                body,
                 timestamp: Date.now()
             };
+            // Guardar en localStorage vía cliente (IDB no está disponible directamente en SW sin lib)
+            // Notificar a los clientes para que encolen
             const clientList = await self.clients.matchAll({ includeUncontrolled: true });
             clientList.forEach(client => client.postMessage({ type: 'OFFLINE_REQUEST_QUEUED', request: queued }));
         } catch { /* OK */ }

@@ -6,9 +6,7 @@
     <meta name="robots" content="noindex, nofollow">
     <meta name="description" content="Iniciá sesión en CuidaDiario — App para cuidadores familiares.">
     <title>Login - CuidaDiario | EDEN SoftWork</title>
-    <link rel="icon" href="/icon.svg" type="image/svg+xml">
-    <link rel="apple-touch-icon" href="/icon.svg">
-    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💊</text></svg>">
     <link rel="stylesheet" href="css/styles.css">
     <style>
         .login-container {
@@ -423,26 +421,6 @@
         if (API.isAuthenticated()) {
             window.location.href = 'index.html';
         }
-
-        // ── Offline auto-access ──────────────────────────────────────
-        // Si no hay internet pero hay una sesión conocida: abrir la app sin login.
-        // Cuando vuelva el internet, el primer request autenticado detectará el
-        // token caducado y redirigirá al login normalmente.
-        function _tryOfflineAccess() {
-            const last = API.getLastUser();
-            if (!last) return false;
-            // Restaurar cuidadiario_user para que index.html pueda renderizar
-            if (!API.getUser()) {
-                localStorage.setItem('cuidadiario_user',
-                    localStorage.getItem('cuidadiario_last_user'));
-            }
-            showSuccess('📵 Sin conexión — Abriendo sesión guardada en este dispositivo...');
-            setTimeout(() => { window.location.href = 'index.html'; }, 1400);
-            return true;
-        }
-        if (!navigator.onLine) _tryOfflineAccess();
-        window.addEventListener('offline', () => _tryOfflineAccess(), { once: true });
-        // ── End offline auto-access ──────────────────────────────────────
 
         function togglePass(id, btn) {
             const inp = document.getElementById(id);
