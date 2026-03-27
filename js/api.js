@@ -20,8 +20,11 @@ const API = {
         localStorage.setItem('cuidadiario_token', token);
     },
     
-    // Eliminar token
+    // Eliminar token (activo) pero preservar LAST_USER para login offline
     removeToken() {
+        // Preserve user copy BEFORE deleting it, so offline login can recover
+        const curr = localStorage.getItem('cuidadiario_user');
+        if (curr) localStorage.setItem('cuidadiario_last_user', curr);
         localStorage.removeItem('cuidadiario_token');
         localStorage.removeItem('cuidadiario_user');
     },
@@ -31,10 +34,19 @@ const API = {
         const user = localStorage.getItem('cuidadiario_user');
         return user ? JSON.parse(user) : null;
     },
+
+    // Obtener último usuario conocido (sobrevive a la expiración de sesión y al logout por token)
+    // Fallback a cuidadiario_user para compatibilidad con sesiones anteriores al cambio
+    getLastUser() {
+        const u = localStorage.getItem('cuidadiario_last_user') || localStorage.getItem('cuidadiario_user');
+        return u ? JSON.parse(u) : null;
+    },
     
     // Guardar usuario
     setUser(user) {
-        localStorage.setItem('cuidadiario_user', JSON.stringify(user));
+        const s = JSON.stringify(user);
+        localStorage.setItem('cuidadiario_user', s);
+        localStorage.setItem('cuidadiario_last_user', s); // persists through token expiry
     },
     
     // Verificar si está autenticado
@@ -113,6 +125,8 @@ const API = {
     },
     
     logout() {
+        // Clear last_user on explicit logout (user chose to sign out)
+        localStorage.removeItem('cuidadiario_last_user');
         this.removeToken();
         // Limpiar el cache de datos de API en el Service Worker antes de redirigir.
         // Esto evita que un usuario posterior en el mismo dispositivo acceda a
@@ -627,5 +641,13 @@ const API = {
     }
 };
 
-
-
+// One-time migration: seed cuidadiario_last_user from current session if not yet present.
+// Ensures offline login works even for users who logged in before this change was deployed.
+(function _seedLastUser() {
+    try {
+        if (!localStorage.getItem('cuidadiario_last_user')) {
+            const curr = localStorage.getItem('cuidadiario_user');
+            if (curr) localStorage.setItem('cuidadiario_last_user', curr);
+        }
+    } catch {}
+})();
