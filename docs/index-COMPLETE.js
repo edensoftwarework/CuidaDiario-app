@@ -59,6 +59,15 @@
 const express = require('express');
 const app = express();
 const pool = require('./db');
+// ─── Zona horaria Argentina para todas las conexiones del pool ───────────────
+// Esto asegura que NOW() devuelva la hora local de Argentina en vez de UTC.
+// Afecta INSERT DEFAULT NOW(), comparaciones, y serialización de TIMESTAMP.
+pool.on('connect', client => {
+    client.query("SET TIME ZONE 'America/Argentina/Buenos_Aires'").catch(err =>
+        console.error('[DB] Error al configurar timezone:', err.message)
+    );
+});
+// ─────────────────────────────────────────────────────────────────────────────
 const bcrypt = require('bcrypt');
 const SALT_ROUNDS = 10;
 const jwt = require('jsonwebtoken');
@@ -94,6 +103,27 @@ function rateLimit(maxReq = 10, windowMs = 60000) {
     };
 }
 const authRateLimit = rateLimit(10, 60000); // 10 intentos / 60 seg
+
+// ── Helper: convierte un ISO UTC string (enviado por el cliente) a una fecha naive
+// que representa la hora local de Argentina (UTC-3), para insertarla en columnas
+// TIMESTAMP sin zona. Si el valor es inválido, devuelve null y el backend usará NOW().
+function utcIsoToArgentinaNaive(isoStr) {
+    if (!isoStr) return null;
+    try {
+        const d = new Date(isoStr);
+        if (isNaN(d.getTime())) return null;
+        // Formatea la fecha en la zona Argentina para obtener la hora local correcta
+        const ar = new Intl.DateTimeFormat('sv-SE', {
+            timeZone: 'America/Argentina/Buenos_Aires',
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit', second: '2-digit',
+            hour12: false,
+        }).format(d);
+        // 'sv-SE' produce "YYYY-MM-DD HH:MM:SS" — parseable como naive local
+        return new Date(ar);
+    } catch { return null; }
+}
+
 const https = require('https');
 const crypto = require('crypto');          // ← nativo Node.js, sin instalar nada
 const webPush = require('web-push');       // ← push notifications
@@ -179,7 +209,8 @@ app.use(cors({
     credentials: true
 }));
 app.use('/api/paypal/webhook', express.raw({ type: 'application/json' }));
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // ========== VAPID — Web Push (NUEVO) ==========
 const VAPID_PUBLIC_KEY  = process.env.VAPID_PUBLIC_KEY;
@@ -580,6 +611,153 @@ async function runMigrations() {
         await pool.query(`ALTER TABLE usuarios_b2b ADD COLUMN IF NOT EXISTS email_verification_token  TEXT`).catch(() => {});
         await pool.query(`ALTER TABLE usuarios_b2b ADD COLUMN IF NOT EXISTS email_verification_expiry TIMESTAMPTZ`).catch(() => {});
         console.log('✅ Migraciones B2B v6 completadas');
+
+        // MIGRACIONES B2B v7 — Plan 'free' por defecto + columna inicio período de prueba
+        await pool.query(`ALTER TABLE instituciones_b2b ALTER COLUMN plan SET DEFAULT 'free'`).catch(() => {});
+        await pool.query(`ALTER TABLE instituciones_b2b ADD COLUMN IF NOT EXISTS trial_started_at TIMESTAMPTZ DEFAULT NOW()`).catch(() => {});
+        // Instituciones ya existentes sin trial_started_at: asignar created_at como inicio de prueba
+        await pool.query(`UPDATE instituciones_b2b SET trial_started_at = created_at WHERE trial_started_at IS NULL`).catch(() => {});
+        console.log('✅ Migraciones B2B v7 completadas');
+
+        // MIGRACIONES B2B v8 — Modo estación compartida persistente (cross-device)
+        await pool.query(`ALTER TABLE instituciones_b2b ADD COLUMN IF NOT EXISTS shared_mode BOOLEAN DEFAULT FALSE`).catch(() => {});
+        console.log('✅ Migraciones B2B v8 completadas');
+
+        // MIGRACIONES B2B v9 — Preferencias de alertas en DB + tracking descuento de precio introductorio
+        await pool.query(`ALTER TABLE usuarios_b2b ADD COLUMN IF NOT EXISTS notif_prefs JSONB DEFAULT '{}'`).catch(() => {});
+        await pool.query(`ALTER TABLE instituciones_b2b ADD COLUMN IF NOT EXISTS mp_preapproval_id TEXT`).catch(() => {});
+        await pool.query(`ALTER TABLE instituciones_b2b ADD COLUMN IF NOT EXISTS discount_expires_at TIMESTAMPTZ`).catch(() => {});
+        console.log('✅ Migraciones B2B v9 completadas');
+
+        // MIGRACIONES B2B v10 — Catálogo híbrido: insumos específicos por paciente
+        // paciente_id NULL = insumo institucional general; paciente_id != NULL = insumo propio del paciente
+        await pool.query(`ALTER TABLE catalogo_medicamentos_b2b ADD COLUMN IF NOT EXISTS paciente_id INTEGER REFERENCES pacientes_b2b(id) ON DELETE SET NULL`).catch(() => {});
+        console.log('✅ Migraciones B2B v10 completadas');
+        // MIGRACIONES B2B v11 — Historial de citas (reutilizar citas)
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS historial_citas_b2b (
+                id              SERIAL PRIMARY KEY,
+                institucion_id  INTEGER NOT NULL REFERENCES instituciones_b2b(id) ON DELETE CASCADE,
+                cita_id         INTEGER REFERENCES citas_b2b(id) ON DELETE SET NULL,
+                paciente_id     INTEGER NOT NULL REFERENCES pacientes_b2b(id) ON DELETE CASCADE,
+                titulo          VARCHAR(255) NOT NULL,
+                descripcion     TEXT,
+                fecha           TIMESTAMP NOT NULL,
+                medico          VARCHAR(255),
+                especialidad    VARCHAR(255),
+                lugar           VARCHAR(255),
+                estado          VARCHAR(50),
+                archivado_en    TIMESTAMP DEFAULT NOW(),
+                archivado_por   INTEGER REFERENCES usuarios_b2b(id) ON DELETE SET NULL
+            )
+        `).catch(() => {});
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_historial_citas_paciente ON historial_citas_b2b (paciente_id, fecha DESC)`).catch(() => {});
+        console.log('✅ Migraciones B2B v11 completadas');
+
+        // MIGRACIONES B2B v12 — Historial de restock de insumos + timestamp para campana de notificaciones
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS historial_restock_b2b (
+                id                SERIAL PRIMARY KEY,
+                institucion_id    INTEGER NOT NULL REFERENCES instituciones_b2b(id) ON DELETE CASCADE,
+                catalogo_id       INTEGER REFERENCES catalogo_medicamentos_b2b(id) ON DELETE SET NULL,
+                paciente_id       INTEGER REFERENCES pacientes_b2b(id) ON DELETE SET NULL,
+                nombre_item       TEXT NOT NULL,
+                stock_anterior    INTEGER NOT NULL DEFAULT 0,
+                cantidad_repuesta INTEGER NOT NULL DEFAULT 0,
+                stock_nuevo       INTEGER NOT NULL DEFAULT 0,
+                notas             TEXT,
+                registrado_por    INTEGER REFERENCES usuarios_b2b(id) ON DELETE SET NULL,
+                registrado_nombre TEXT,
+                created_at        TIMESTAMPTZ DEFAULT NOW()
+            )
+        `).catch(() => {});
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_restock_paciente ON historial_restock_b2b (paciente_id, created_at DESC)`).catch(() => {});
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_restock_catalogo ON historial_restock_b2b (catalogo_id, created_at DESC)`).catch(() => {});
+        await pool.query(`ALTER TABLE usuarios_b2b ADD COLUMN IF NOT EXISTS notif_last_seen_at TIMESTAMPTZ`).catch(() => {});
+        console.log('✅ Migraciones B2B v12 completadas');
+
+        // MIGRACIONES B2B v13 — Fecha de vencimiento de plan asignado manualmente
+        await pool.query(`ALTER TABLE instituciones_b2b ADD COLUMN IF NOT EXISTS plan_manual_expires_at TIMESTAMPTZ`).catch(() => {});
+        console.log('✅ Migraciones B2B v13 completadas');
+
+        // MIGRACIÓN B2B v14 — Cantidad de unidades por toma de medicamento/insumo
+        await pool.query(`ALTER TABLE historial_medicamentos_b2b ADD COLUMN IF NOT EXISTS cantidad INTEGER DEFAULT 1`).catch(() => {});
+        console.log('✅ Migraciones B2B v14 completadas');
+
+        // ============================================================
+        // MIGRACIÓN TZ v1 — corrección única de zona horaria (UTC → Argentina)
+        // Se ejecuta una sola vez al detectar que aún no fue aplicada.
+        // ============================================================
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS _migrations (
+                name   TEXT PRIMARY KEY,
+                ran_at TIMESTAMP DEFAULT NOW()
+            )
+        `).catch(() => {});
+        const tzM = await pool.query(
+            `INSERT INTO _migrations (name) VALUES ('tz_ar_v1') ON CONFLICT (name) DO NOTHING RETURNING name`
+        ).catch(() => ({ rows: [] }));
+        if (tzM.rows.length > 0) {
+            // 1. Convertir columnas TIMESTAMPTZ a TIMESTAMP con valor ya en hora argentina
+            //    (así el truco de strip-Z del frontend las trata como hora local directamente)
+            await pool.query(`
+                ALTER TABLE historial_restock_b2b
+                ALTER COLUMN created_at TYPE TIMESTAMP
+                USING (created_at AT TIME ZONE 'America/Argentina/Buenos_Aires')
+            `).catch(e => console.error('[TZ-mig] restock created_at:', e.message));
+            await pool.query(`
+                ALTER TABLE usuarios_b2b
+                ALTER COLUMN notif_last_seen_at TYPE TIMESTAMP
+                USING (notif_last_seen_at AT TIME ZONE 'America/Argentina/Buenos_Aires')
+            `).catch(e => console.error('[TZ-mig] notif_last_seen_at:', e.message));
+            // 2. Corregir timestamps TIMESTAMP que fueron almacenados como UTC (-3h → hora AR)
+            const tzCols = [
+                ['instituciones_b2b',          'created_at'  ],
+                ['usuarios_b2b',               'created_at'  ],
+                ['pacientes_b2b',              'created_at'  ],
+                ['medicamentos_b2b',           'created_at'  ],
+                ['tareas_b2b',                 'created_at'  ],
+                ['notas_b2b',                  'created_at'  ],
+                ['contactos_b2b',              'created_at'  ],
+                ['citas_b2b',                  'created_at'  ],
+                ['historial_medicamentos_b2b', 'fecha'       ],
+                ['historial_tareas_b2b',       'fecha'       ],
+                ['sintomas_b2b',               'fecha'       ],
+                ['signos_vitales_b2b',         'fecha'       ],
+                ['historial_citas_b2b',        'archivado_en'],
+                ['catalogo_medicamentos_b2b',  'created_at'  ],
+                ['historial_restock_b2b',      'created_at'  ],
+            ];
+            for (const [tbl, col] of tzCols) {
+                await pool.query(
+                    `UPDATE ${tbl} SET ${col} = ${col} - INTERVAL '3 hours' WHERE ${col} IS NOT NULL`
+                ).catch(e => console.error(`[TZ-mig] ${tbl}.${col}:`, e.message));
+            }
+            console.log('✅ Migración TZ v1 completada — timestamps ajustados a hora de Argentina');
+        }
+
+        // ============================================================
+        // MIGRACIÓN TZ v2 — convierte catalogo.updated_at a TIMESTAMP local AR
+        // ============================================================
+        const tzM2 = await pool.query(
+            `INSERT INTO _migrations (name) VALUES ('tz_ar_v2') ON CONFLICT (name) DO NOTHING RETURNING name`
+        ).catch(() => ({ rows: [] }));
+        if (tzM2.rows.length > 0) {
+            await pool.query(`
+                ALTER TABLE catalogo_medicamentos_b2b
+                ALTER COLUMN updated_at TYPE TIMESTAMP
+                USING (updated_at AT TIME ZONE 'America/Argentina/Buenos_Aires')
+            `).catch(e => console.error('[TZ-mig v2] catalogo updated_at:', e.message));
+            await pool.query(
+                `UPDATE catalogo_medicamentos_b2b SET updated_at = updated_at - INTERVAL '3 hours' WHERE updated_at IS NOT NULL`
+            ).catch(e => console.error('[TZ-mig v2] catalogo updated_at adjust:', e.message));
+            console.log('✅ Migración TZ v2 completada');
+        }
+
+        // MIGRACIÓN B2B v14 — updated_at en citas para rastrear cuándo se marcó como realizada
+        await pool.query(`ALTER TABLE citas_b2b ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`).catch(() => {});
+        console.log('✅ Migración B2B v14 completada');
+
         // ============================================================
         // FIN MIGRACIONES B2B
         // ============================================================
@@ -1929,6 +2107,271 @@ app.delete('/api/share/:id', authMiddleware, async (req, res) => {
 });
 
 // ========== MERCADOPAGO ==========
+// ========== MERCADOPAGO B2B (CuidaDiario PRO) ==========
+// Endpoints: /api/b2b/create-subscription, /api/b2b/webhook/mercadopago, /api/b2b/verify-subscription
+// El external_reference es el id de la institución (instituciones_b2b)
+
+// POST /api/b2b/create-subscription — Crea suscripción MercadoPago para la institución
+app.post('/api/b2b/create-subscription', authB2BMiddleware, requireB2BRole('admin_institucion'), async (req, res) => {
+    try {
+        // Obtener datos de la institución
+        const instRes = await pool.query('SELECT id, nombre, email, mp_preapproval_id FROM instituciones_b2b WHERE id=$1', [req.b2bUser.institucion_id]);
+        if (instRes.rows.length === 0) return res.status(404).json({ error: 'Institución no encontrada' });
+        const inst = instRes.rows[0];
+        const PLANES_MP = {
+            total:  { reason: 'CuidaDiario PRO — Plan Total',   amount: 99000 },
+            pro:    { reason: 'CuidaDiario PRO — Plan PRO',     amount: 59000 },
+            basico: { reason: 'CuidaDiario PRO — Plan Básico',  amount: 29000 }
+        };
+        const planKey  = Object.keys(PLANES_MP).includes(req.body.plan) ? req.body.plan : 'pro';
+        // Validar elegibilidad del plan según conteos actuales (familiares excluidos del staff)
+        const eligR = await pool.query(
+            `SELECT (SELECT COUNT(*) FROM pacientes_b2b WHERE institucion_id=$1 AND activo=TRUE AND fecha_egreso IS NULL) AS pac,
+                    (SELECT COUNT(*) FROM usuarios_b2b WHERE institucion_id=$1 AND activo=TRUE AND rol != 'familiar') AS stf`,
+            [inst.id]);
+        const curPac = parseInt(eligR.rows[0].pac) || 0;
+        const curStf = parseInt(eligR.rows[0].stf) || 0;
+        if (planKey === 'basico' && (curPac > 15 || curStf > 8)) {
+            const parts = [];
+            if (curPac > 15) parts.push(`${curPac} pacientes activos (máx. 15 en Básico)`);
+            if (curStf > 8)  parts.push(`${curStf} miembros de staff (máx. 8 en Básico)`);
+            return res.status(403).json({ error: `No podés contratar el Plan Básico con tu configuración actual: ${parts.join(' y ')}. Reducí primero tus registros desde Pacientes o Staff.`, code: 'PLAN_LIMIT_EXCEEDED' });
+        }
+        if (planKey === 'pro' && (curPac > 40 || curStf > 20)) {
+            const parts = [];
+            if (curPac > 40) parts.push(`${curPac} pacientes activos (máx. 40 en PRO)`);
+            if (curStf > 20) parts.push(`${curStf} miembros de staff (máx. 20 en PRO)`);
+            return res.status(403).json({ error: `No podés contratar el Plan PRO con tu configuración actual: ${parts.join(' y ')}. Actualizá a Plan Total para continuar.`, code: 'PLAN_LIMIT_EXCEEDED' });
+        }
+        // Cancelar suscripción MP anterior antes de crear la nueva (evita doble cobro)
+        // Guard: ignorar el sentinel 'baja_programada' que no es un ID real de MP
+        if (inst.mp_preapproval_id && inst.mp_preapproval_id !== 'baja_programada' && MP_ACCESS_TOKEN) {
+            try {
+                await mpRequest(`/preapproval/${inst.mp_preapproval_id}`, 'PUT', { status: 'cancelled' });
+                console.log(`[MP B2B] create-subscription: cancelada suscripción anterior ${inst.mp_preapproval_id} — inst ${inst.id}`);
+                await pool.query('UPDATE instituciones_b2b SET mp_preapproval_id=NULL WHERE id=$1', [inst.id]);
+            } catch (cancelErr) {
+                console.warn(`[MP B2B] No se pudo cancelar suscripción anterior: ${cancelErr.message}`);
+            }
+        }
+
+        const testMode = req.body.test_mode === true;
+        const planInfo = PLANES_MP[planKey];
+        const payload = {
+            reason: planInfo.reason,
+            auto_recurring: { frequency: 1, frequency_type: 'months', transaction_amount: planInfo.amount, currency_id: 'ARS' },
+            back_url: `${FRONTEND_URL_PRO}/pages/configuracion.html?mp_success=1&plan=${planKey}`,
+            payer_email: inst.email || req.b2bUser.email,
+            external_reference: String(inst.id),
+            ...(testMode ? { free_trial: { frequency: 1, frequency_type: 'days' } } : {})
+        };
+        console.log(`[MP B2B] create-subscription — institución ${inst.id}, plan: ${planKey}, testMode: ${testMode}`);
+        const mp = await mpRequest('/preapproval', 'POST', payload);
+        if (mp.status !== 200 && mp.status !== 201) {
+            console.error('Error MP B2B create-subscription:', mp.body);
+            return res.status(400).json({ error: mp.body?.message || 'Error al crear suscripción en MercadoPago' });
+        }
+        res.json({ init_point: mp.body.init_point, preapproval_id: mp.body.id });
+    } catch (err) {
+        console.error('Error B2B create-subscription:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/b2b/webhook/mercadopago — Webhook MercadoPago para B2B
+app.post('/api/b2b/webhook/mercadopago', async (req, res) => {
+    try {
+        if (!verifyMPWebhookSignature(req)) {
+            console.warn('[MP Webhook B2B] Firma inválida — request rechazado');
+            return res.sendStatus(401);
+        }
+        const body = req.body || {};
+        const type  = body.type  || null;
+        const topic = req.query.topic || body.topic || null;
+        const dataId = body.data?.id || req.query['data.id'] || req.query.id || null;
+        const isPreapprovalEvent =
+            type  === 'subscription_preapproval' ||
+            type  === 'preapproval'              ||
+            topic === 'preapproval';
+        console.log(`[MP Webhook B2B] Recibido — type="${type}" topic="${topic}" dataId="${dataId}"`);
+        if (isPreapprovalEvent && dataId) {
+            const mp = await mpRequest(`/preapproval/${dataId}`);
+            if (mp.status === 200) {
+                const preapproval = mp.body;
+                const instId = parseInt(preapproval.external_reference);
+                if (instId && !isNaN(instId)) {
+                    if (preapproval.status === 'authorized') {
+                        const plan = _mpPlanFromPreapproval(preapproval);
+                        await pool.query(
+                            `UPDATE instituciones_b2b SET plan=$1, mp_preapproval_id=$3, plan_manual_expires_at=NOW() + INTERVAL '31 days' WHERE id=$2`,
+                            [plan, instId, preapproval.id]
+                        );
+                        console.log(`[MP Webhook B2B] ✅ Institución ${instId} → plan: ${plan.toUpperCase()} (estado MP: "${preapproval.status}") — renovación en 31 días`)
+                    } else if (['cancelled', 'paused', 'expired'].includes(preapproval.status)) {
+                        // Solo revertir a free si el mp_preapproval_id en DB todavía coincide con este preapproval.
+                        // Si ya tiene el sentinel 'baja_programada' (baja diferida), el AND no hace match
+                        // y el plan se mantiene activo hasta plan_manual_expires_at (comportamiento correcto).
+                        const upd = await pool.query(
+                            `UPDATE instituciones_b2b SET plan='free' WHERE id=$1 AND mp_preapproval_id=$2 RETURNING id`,
+                            [instId, preapproval.id]
+                        );
+                        if (upd.rowCount > 0) {
+                            console.log(`[MP Webhook B2B] 🔻 Institución ${instId} → plan: free (estado MP: "${preapproval.status}")`); 
+                        } else {
+                            console.log(`[MP Webhook B2B] ℹ️ Institución ${instId} — estado MP: "${preapproval.status}" ignorado (baja diferida activa o preapproval obsoleto)`);
+                        }
+                    } else {
+                        console.log(`[MP Webhook B2B] ℹ️ Institución ${instId} — estado MP: "${preapproval.status}" (sin cambio de plan)`);
+                    }
+                } else {
+                    console.warn(`[MP Webhook B2B] external_reference inválido: "${preapproval.external_reference}"`);
+                }
+            } else {
+                console.warn(`[MP Webhook B2B] No se pudo obtener preapproval "${dataId}" — HTTP ${mp.status}`);
+            }
+        } else {
+            console.log(`[MP Webhook B2B] Evento ignorado (no es preapproval)`);
+        }
+        res.sendStatus(200);
+    } catch (err) {
+        console.error('[MP Webhook B2B] Error:', err.message);
+        res.sendStatus(200);
+    }
+});
+
+// Helper: determina el plan (total/pro/basico) a partir de un objeto preapproval de MP
+function _mpPlanFromPreapproval(preapproval) {
+    const reason = (preapproval?.reason || '').toLowerCase();
+    const amount = preapproval?.auto_recurring?.transaction_amount;
+    // Detectar por descripción (más fiable)
+    if (reason.includes('total')) return 'total';
+    if (reason.includes('plan pro')) return 'pro';
+    if (reason.includes('básico') || reason.includes('basico')) return 'basico';
+    // Fallback por monto
+    if (amount >= 50000) return 'total';
+    if (amount >= 20000) return 'pro';
+    return 'basico';
+}
+
+// GET /api/b2b/verify-subscription — Verifica el estado de la suscripción MP y actualiza el plan
+// Requiere preapproval_id en el query para actualizar; sin él solo devuelve el plan actual de la DB.
+app.get('/api/b2b/verify-subscription', authB2BMiddleware, requireB2BRole('admin_institucion'), async (req, res) => {
+    const instId = req.b2bUser.institucion_id;
+    try {
+        const preapprovalId = req.query.preapproval_id;
+
+        // Sin preapproval_id → solo reportar el plan actual, sin consultar ni modificar MP
+        if (!preapprovalId) {
+            const instRes = await pool.query('SELECT plan FROM instituciones_b2b WHERE id=$1', [instId]);
+            const currentPlan = instRes.rows[0]?.plan || 'free';
+            return res.json({ plan: currentPlan, status: 'current' });
+        }
+
+        if (!MP_ACCESS_TOKEN) {
+            return res.status(400).json({ error: 'MercadoPago no configurado en el servidor' });
+        }
+
+        // Con preapproval_id: verificar el pago real en MP
+        const mp = await mpRequest(`/preapproval/${preapprovalId}`);
+        if (mp.status !== 200) {
+            console.warn(`[MP Verify B2B] No se pudo obtener preapproval ${preapprovalId} — HTTP ${mp.status}`);
+            return res.json({ plan: 'free', status: 'not_found', message: 'No se pudo verificar el pago. Intentá nuevamente en unos minutos.' });
+        }
+
+        const preapproval = mp.body;
+        const ref = parseInt(preapproval.external_reference);
+        if (ref !== instId) {
+            console.warn(`[MP Verify B2B] preapproval ${preapprovalId}: external_reference="${preapproval.external_reference}" no coincide con institucion ${instId}`);
+            return res.status(403).json({ error: 'Este pago no corresponde a tu institución' });
+        }
+
+        if (preapproval.status === 'authorized') {
+            const plan = _mpPlanFromPreapproval(preapproval);
+            await pool.query(
+                `UPDATE instituciones_b2b
+                 SET plan=$1, mp_preapproval_id=$3,
+                     plan_manual_expires_at=NOW() + INTERVAL '31 days',
+                     discount_expires_at = CASE WHEN discount_expires_at IS NULL THEN NOW() + INTERVAL '6 months' ELSE discount_expires_at END
+                 WHERE id=$2`,
+                [plan, instId, preapproval.id]
+            );
+            console.log(`[MP Verify B2B] ✅ Institución ${instId} → plan: ${plan.toUpperCase()} (preapproval: ${preapproval.id}) — renovación en 31 días`);
+            return res.json({ plan, status: 'authorized' });
+        }
+
+        if (preapproval.status === 'pending') {
+            return res.json({ plan: 'free', status: 'pending', message: 'El pago está siendo procesado. Puede demorar unos minutos.' });
+        }
+
+        // Cancelado / expirado / pausado
+        console.log(`[MP Verify B2B] Institución ${instId} — estado MP: "${preapproval.status}"`);
+        return res.json({ plan: 'free', status: preapproval.status, message: 'La suscripción no está activa.' });
+
+    } catch (err) {
+        console.error('[MP Verify B2B] Error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/b2b/cancel-subscription — Cancela la suscripción MP activa de la institución
+// Llama a la API de MP (PUT /preapproval/:id status:cancelled) y setea plan='free' en DB.
+// Funciona independientemente de si el usuario tiene cuenta MP o pagó como invitado con tarjeta.
+app.post('/api/b2b/cancel-subscription', authB2BMiddleware, requireB2BRole('admin_institucion'), async (req, res) => {
+    const instId = req.b2bUser.institucion_id;
+    try {
+        const instRes = await pool.query(
+            'SELECT mp_preapproval_id, plan, plan_manual_expires_at FROM instituciones_b2b WHERE id=$1',
+            [instId]
+        );
+        if (instRes.rowCount === 0) return res.status(404).json({ error: 'Institución no encontrada' });
+        const inst = instRes.rows[0];
+
+        if (!['basico','pro','total'].includes(inst.plan)) {
+            return res.status(400).json({ error: 'No hay ningún plan activo para cancelar.' });
+        }
+
+        // Cancelar en MercadoPago solo si hay preapproval real (no el sentinel 'baja_programada')
+        if (inst.mp_preapproval_id && inst.mp_preapproval_id !== 'baja_programada' && MP_ACCESS_TOKEN) {
+            const mp = await mpRequest(`/preapproval/${inst.mp_preapproval_id}`, 'PUT', { status: 'cancelled' });
+            if (mp.status === 200) {
+                console.log(`[MP Cancel B2B] ✅ Preapproval ${inst.mp_preapproval_id} cancelado — inst ${instId}`);
+            } else {
+                console.warn(`[MP Cancel B2B] HTTP ${mp.status} al cancelar ${inst.mp_preapproval_id}:`, mp.body?.message);
+                // Continuamos igual: actualizamos DB aunque MP retorne error
+            }
+        }
+
+        // Baja programada: cancelar en MP para detener futuros cobros,
+        // pero mantener el plan activo hasta que venza plan_manual_expires_at.
+        // El sistema ya revierte a free automáticamente cuando esa fecha llega (checkInstPlanForAction).
+
+        // Determinar fecha hasta la que se mantiene el acceso
+        let accessUntil = inst.plan_manual_expires_at ? new Date(inst.plan_manual_expires_at) : null;
+        if (!accessUntil) {
+            // Sin fecha registrada (suscripción antigua o primer ciclo): dar 31 días desde hoy
+            accessUntil = new Date();
+            accessUntil.setDate(accessUntil.getDate() + 31);
+        }
+
+        // Actualizar DB: marcar con sentinel 'baja_programada' para distinguir
+        // baja real de plan manual de admin. El plan se mantiene activo hasta plan_manual_expires_at.
+        await pool.query(
+            `UPDATE instituciones_b2b SET mp_preapproval_id='baja_programada', plan_manual_expires_at=$2 WHERE id=$1`,
+            [instId, accessUntil]
+        );
+        console.log(`[Cancel B2B] ✅ Inst ${instId} — baja programada (era ${inst.plan}) — acceso hasta ${accessUntil.toLocaleDateString('es-AR')}`);
+        res.json({
+            success: true,
+            deferred: true,
+            access_until: accessUntil.toISOString(),
+            message: `Suscripción cancelada. Tu plan sigue activo hasta el ${accessUntil.toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })}. Después de esa fecha, la cuenta pasará automáticamente a Free.`
+        });
+    } catch (err) {
+        console.error('[Cancel B2B] Error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 const MP_ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN;
 
 function mpRequest(path, method = 'GET', body = null) {
@@ -1986,18 +2429,16 @@ function verifyMPWebhookSignature(req) {
     if (!MP_WEBHOOK_SECRET) return true; // Sin secret: siempre aceptar
     const signature = req.headers['x-signature'];
     const requestId = req.headers['x-request-id'] || '';
-    if (!signature) return true; // Sin firma: aceptar igualmente
+    if (!signature) return false; // Con secret activo, rechazar si no hay firma
     const ts = (signature.split(',').find(p => p.startsWith('ts=')) || '').replace('ts=', '');
     const v1 = (signature.split(',').find(p => p.startsWith('v1=')) || '').replace('v1=', '');
-    if (!ts || !v1) return true;
+    if (!ts || !v1) return false;
     const dataId = req.query['data.id'] || (req.body?.data?.id) || '';
     const manifest = `id:${dataId};request-id:${requestId};ts:${ts}`;
     const expected = crypto.createHmac('sha256', MP_WEBHOOK_SECRET).update(manifest).digest('hex');
     try {
-        const valid = crypto.timingSafeEqual(Buffer.from(v1, 'hex'), Buffer.from(expected, 'hex'));
-        if (!valid) console.warn('[MP Webhook] ⚠️ Firma inválida — procesando igual (MP_WEBHOOK_SECRET puede estar mal configurado)');
-        return true; // Siempre procesar — la re-verificación con MP API garantiza seguridad
-    } catch { return true; }
+        return crypto.timingSafeEqual(Buffer.from(v1, 'hex'), Buffer.from(expected, 'hex'));
+    } catch { return false; }
 }
 
 app.post('/api/webhook/mercadopago', async (req, res) => {
@@ -2331,6 +2772,99 @@ async function syncMPSubscriptions() {
     } catch (e) {
         console.error('[MP Sync] Error:', e.message);
     }
+
+    // B2B — sincronizar instituciones con planes pagos
+    try {
+        const b2bInsts = await pool.query(
+            `SELECT id, mp_preapproval_id FROM instituciones_b2b
+             WHERE plan IN ('basico','pro','total')
+               AND mp_preapproval_id IS NOT NULL
+               AND mp_preapproval_id != 'baja_programada'
+               AND (plan_manual_expires_at IS NULL OR plan_manual_expires_at > NOW())`
+        );
+        if (b2bInsts.rows.length > 0) {
+            console.log(`[MP Sync B2B] Verificando ${b2bInsts.rows.length} institución(es) con plan activo...`);
+            let b2bDeactivated = 0;
+            for (const inst of b2bInsts.rows) {
+                try {
+                    const search = await mpRequest(`/preapproval/search?external_reference=${inst.id}&status=authorized`);
+                    if (search.status !== 200) continue;
+                    const hasAuthorized = (search.body?.results || []).some(p => p.status === 'authorized');
+                    if (!hasAuthorized) {
+                        await pool.query("UPDATE instituciones_b2b SET plan='free' WHERE id=$1", [inst.id]);
+                        console.log(`[MP Sync B2B] 🔻 Institución ${inst.id} → plan: free (sin suscripción autorizada)`);
+                        b2bDeactivated++;
+                    }
+                    await new Promise(r => setTimeout(r, 300));
+                } catch (e) {
+                    console.warn(`[MP Sync B2B] Error verificando institución ${inst.id}:`, e.message);
+                }
+            }
+            console.log(`[MP Sync B2B] ✅ Sync B2B completado — ${b2bDeactivated} institución(es) desactivada(s)`);
+        }
+    } catch (e) {
+        console.warn('[MP Sync B2B] Error en sync B2B:', e.message);
+    }
+}
+
+// ========== RECORDATORIOS DE VENCIMIENTO DE TRIAL ==========
+// Envía emails de aviso a instituciones en período de prueba que están por vencer.
+// Se llama diariamente desde el servidor.
+async function checkTrialReminders() {
+    if (!RESEND_API_KEY) return; // sin email configurado, saltar silenciosamente
+    try {
+        // Aviso a los 45 días (15 días restantes) — ventana de ±12h para no duplicar
+        const warn15 = await pool.query(`
+            SELECT id, nombre, email FROM instituciones_b2b
+            WHERE plan = 'free' AND trial_started_at IS NOT NULL
+              AND email IS NOT NULL AND email <> ''
+              AND NOW() - trial_started_at BETWEEN INTERVAL '44 days 12 hours' AND INTERVAL '45 days 12 hours'
+        `);
+        for (const inst of warn15.rows) {
+            try {
+                await sendEmail({
+                    to: inst.email,
+                    subject: 'Tu prueba gratuita de CuidaDiario PRO vence en 15 días',
+                    html: `<div style="font-family:'Segoe UI',Arial,sans-serif;max-width:520px;margin:auto;padding:28px;border:1px solid #e5e7eb;border-radius:12px">
+                        <h2 style="color:#1565C0;margin-top:0">⏳ Te quedan 15 días de prueba</h2>
+                        <p>Hola <strong>${inst.nombre}</strong>,</p>
+                        <p>Tu período de prueba gratuito de <strong>CuidaDiario PRO</strong> vence en <strong>15 días</strong>.</p>
+                        <p>Para seguir usando todas las funciones sin interrupciones, activá un plan desde la sección <em>Configuración → Mi Plan</em>.</p>
+                        <a href="${FRONTEND_URL_PRO}/pages/configuracion.html" style="display:inline-block;background:#1565C0;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700;margin-top:12px">Ver planes →</a>
+                        <p style="color:#9CA3AF;font-size:.8rem;margin-top:24px">CuidaDiario PRO · EDEN SoftWork · <a href="mailto:edensoftwarework@gmail.com" style="color:#9CA3AF">soporte</a></p>
+                    </div>`
+                });
+                console.log(`[Trial Reminder] ⏳ Aviso 15 días enviado a ${inst.email} (institución ${inst.id})`);
+            } catch (e) { console.warn(`[Trial Reminder] No se pudo enviar a ${inst.email}:`, e.message); }
+        }
+
+        // Aviso final a los 55 días (5 días restantes) — ventana de ±12h
+        const warn5 = await pool.query(`
+            SELECT id, nombre, email FROM instituciones_b2b
+            WHERE plan = 'free' AND trial_started_at IS NOT NULL
+              AND email IS NOT NULL AND email <> ''
+              AND NOW() - trial_started_at BETWEEN INTERVAL '54 days 12 hours' AND INTERVAL '55 days 12 hours'
+        `);
+        for (const inst of warn5.rows) {
+            try {
+                await sendEmail({
+                    to: inst.email,
+                    subject: '⚠️ Tu prueba de CuidaDiario PRO vence en 5 días',
+                    html: `<div style="font-family:'Segoe UI',Arial,sans-serif;max-width:520px;margin:auto;padding:28px;border:1px solid #e5e7eb;border-radius:12px">
+                        <h2 style="color:#DC2626;margin-top:0">⚠️ ¡Solo quedan 5 días!</h2>
+                        <p>Hola <strong>${inst.nombre}</strong>,</p>
+                        <p>Tu período de prueba gratuito de <strong>CuidaDiario PRO</strong> vence en <strong>5 días</strong>.</p>
+                        <p>Después de esa fecha, no podrás agregar nuevos registros. Tus datos existentes estarán seguros.</p>
+                        <a href="${FRONTEND_URL_PRO}/pages/configuracion.html" style="display:inline-block;background:#DC2626;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700;margin-top:12px">Activar plan ahora →</a>
+                        <p style="color:#9CA3AF;font-size:.8rem;margin-top:24px">CuidaDiario PRO · EDEN SoftWork · <a href="mailto:edensoftwarework@gmail.com" style="color:#9CA3AF">soporte</a></p>
+                    </div>`
+                });
+                console.log(`[Trial Reminder] ⚠️ Aviso final 5 días enviado a ${inst.email} (institución ${inst.id})`);
+            } catch (e) { console.warn(`[Trial Reminder] No se pudo enviar a ${inst.email}:`, e.message); }
+        }
+    } catch (e) {
+        console.error('[Trial Reminders] Error:', e.message);
+    }
 }
 
 // ========== NOTAS ==========
@@ -2412,6 +2946,112 @@ app.delete('/api/notas/:id', authMiddleware, async (req, res) => {
 // ========== B2B — MÓDULO INSTITUCIONAL ==========
 // ============================================================
 
+// ---------- B2B: Helper de límites de plan y expiración del trial ----------
+/**
+ * Verifica si una institución puede realizar una acción según su plan y trial.
+ * Retorna { allowed: true } o { allowed: false, error, code? }
+ */
+async function checkInstPlanForAction(instId, action) {
+    const r = await pool.query(
+        `SELECT plan, trial_started_at, plan_manual_expires_at,
+            (SELECT COUNT(*) FROM pacientes_b2b WHERE institucion_id=$1 AND activo=TRUE AND fecha_egreso IS NULL) AS pacientes_count,
+            (SELECT COUNT(*) FROM usuarios_b2b WHERE institucion_id=$1 AND activo=TRUE AND rol != 'familiar') AS staff_count
+         FROM instituciones_b2b WHERE id=$1`,
+        [instId]
+    );
+    const inst = r.rows[0];
+    if (!inst) return { allowed: false, error: 'Institución no encontrada' };
+
+    const pacientesCount = parseInt(inst.pacientes_count) || 0;
+    const staffCount = parseInt(inst.staff_count) || 0;
+
+    // Verificar si el plan manual ha vencido → degradar a free
+    if (inst.plan !== 'free' && inst.plan_manual_expires_at) {
+        const expiry = new Date(inst.plan_manual_expires_at);
+        if (expiry < new Date()) {
+            // Vencer automáticamente en DB y tratar como free expirado
+            pool.query(`UPDATE instituciones_b2b SET plan='free', plan_manual_expires_at=NULL WHERE id=$1`, [instId]).catch(() => {});
+            inst.plan = 'free';
+            // NO tocar trial_started_at — se usa la fecha real de creación para calcular si el trial venció
+        }
+    }
+
+    // Verificar expiración del trial (plan 'free' = período de prueba)
+    if (inst.plan === 'free') {
+        const started = inst.trial_started_at ? new Date(inst.trial_started_at) : new Date();
+        const daysDiff = (Date.now() - started.getTime()) / (1000 * 60 * 60 * 24);
+        if (daysDiff > 60) {
+            // Permitir solo lectura y modificaciones/eliminaciones de pacientes y staff
+            // (para que puedan reducir el conteo antes de contratar Básico)
+            const allowedInExpiredTrial = ['editar_paciente', 'eliminar_paciente', 'archivar_paciente', 'editar_staff', 'eliminar_staff'];
+            if (!allowedInExpiredTrial.includes(action)) {
+                return {
+                    allowed: false,
+                    code: 'TRIAL_EXPIRED',
+                    pacientes_count: pacientesCount,
+                    staff_count: staffCount,
+                    can_use_basico: pacientesCount <= 15 && staffCount <= 8,
+                    error: 'Tu período de prueba de 60 días ha vencido. Activá un plan desde Configuración para continuar.'
+                };
+            }
+        }
+    }
+
+        // Verificar límites del plan Básico
+    if (inst.plan === 'basico') {
+        if (action === 'crear_paciente') {
+            if (pacientesCount >= 15) {
+                return { allowed: false, error: 'Tu plan Básico permite hasta 15 pacientes activos. Actualizá a PRO para agregar más.' };
+            }
+        }
+        if (action === 'crear_staff') {
+            if (staffCount >= 8) {
+                return { allowed: false, error: 'Tu plan Básico permite hasta 8 miembros del equipo. Actualizá a PRO para agregar más.' };
+            }
+        }
+    }
+
+    // Verificar límites del plan PRO
+    if (inst.plan === 'pro') {
+        if (action === 'crear_paciente') {
+            if (pacientesCount >= 40) {
+                return { allowed: false, error: 'Tu plan PRO permite hasta 40 pacientes activos. Actualizá a Total para agregar más.' };
+            }
+        }
+        if (action === 'crear_staff') {
+            if (staffCount >= 20) {
+                return { allowed: false, error: 'Tu plan PRO permite hasta 20 miembros del equipo. Actualizá a Total para agregar más.' };
+            }
+        }
+    }
+    // plan === 'total' → sin límites
+
+    return { allowed: true };
+}
+
+/**
+ * Middleware Express: bloquea cualquier escritura clínica si el trial expiró.
+ * Se aplica a todos los endpoints POST/PATCH/PUT de datos clínicos.
+ */
+async function requireActivePlan(req, res, next) {
+    try {
+        const check = await checkInstPlanForAction(req.b2bUser.institucion_id, 'accion_clinica');
+        if (!check.allowed) {
+            return res.status(403).json({
+                error: check.error,
+                code: check.code || 'PLAN_REQUIRED',
+                pacientes_count: check.pacientes_count,
+                staff_count: check.staff_count,
+                can_use_basico: check.can_use_basico
+            });
+        }
+        next();
+    } catch (err) {
+        console.error('requireActivePlan:', err.message);
+        next(); // ante fallo de la verificación, no bloquear
+    }
+}
+
 // ---------- B2B: Middleware de autenticación ----------
 function authB2BMiddleware(req, res, next) {
     const auth = req.headers.authorization;
@@ -2420,6 +3060,11 @@ function authB2BMiddleware(req, res, next) {
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         if (!decoded.b2b) return res.status(401).json({ error: 'Token no es B2B' });
+        // Bloquear usuarios cuyo email_verified sea explícitamente false (en el JWT).
+        // === false es intencional: undefined (tokens viejos sin el campo) pasa sin problemas.
+        if (decoded.email_verified === false) {
+            return res.status(401).json({ error: 'Email no verificado. Revisá tu bandeja de entrada o solicitá un nuevo enlace desde el login.', code: 'EMAIL_NOT_VERIFIED' });
+        }
         req.b2bUser = decoded;
         next();
     } catch (e) {
@@ -2438,10 +3083,25 @@ function requireB2BRole(...roles) {
 
 // Helper: verifica si el usuario B2B puede acceder a un paciente
 async function checkB2BPacienteAccess(b2bUser, paciente_id) {
-    if (b2bUser.rol === 'admin_institucion' || b2bUser.rol === 'medico') {
+    if (b2bUser.rol === 'admin_institucion') {
         const r = await pool.query('SELECT id FROM pacientes_b2b WHERE id=$1 AND institucion_id=$2 AND activo=TRUE', [paciente_id, b2bUser.institucion_id]);
         return r.rowCount > 0;
     }
+    // medico y cuidador_staff: respetan el permiso ver_todos_pacientes configurado por la institución
+    if (b2bUser.rol === 'medico' || b2bUser.rol === 'cuidador_staff') {
+        const permKey = `${b2bUser.rol}_ver_todos_pacientes`;
+        let verTodos = true; // default: acceso total si no está configurado explícitamente
+        try {
+            const instRow = await pool.query('SELECT permisos_equipo FROM instituciones_b2b WHERE id=$1', [b2bUser.institucion_id]);
+            const perms = instRow.rows[0]?.permisos_equipo || {};
+            if (permKey in perms) verTodos = !!perms[permKey];
+        } catch {}
+        if (verTodos) {
+            const r = await pool.query('SELECT id FROM pacientes_b2b WHERE id=$1 AND institucion_id=$2 AND activo=TRUE', [paciente_id, b2bUser.institucion_id]);
+            return r.rowCount > 0;
+        }
+    }
+    // familiar / staff sin ver_todos: verificar asignación explícita
     const r = await pool.query('SELECT id FROM asignaciones_b2b WHERE cuidador_id=$1 AND paciente_id=$2 AND activa=TRUE', [b2bUser.id, paciente_id]);
     return r.rowCount > 0;
 }
@@ -2455,6 +3115,10 @@ async function checkB2BCanDo(b2bUser, action) {
         editar_paciente:   { medico: true,  cuidador_staff: true  },
         dar_alta:          { medico: true,  cuidador_staff: false },
         eliminar_paciente: { medico: false, cuidador_staff: false },
+        gestionar_catalogo:{ medico: false, cuidador_staff: false },
+        ver_staff:         { medico: false, cuidador_staff: false },
+        crear_staff:       { medico: false, cuidador_staff: false },
+        asignar_paciente:  { medico: false, cuidador_staff: false },
     };
     try {
         const r = await pool.query('SELECT permisos_equipo FROM instituciones_b2b WHERE id=$1', [b2bUser.institucion_id]);
@@ -2465,10 +3129,33 @@ async function checkB2BCanDo(b2bUser, action) {
     return defaults[action]?.[b2bUser.rol] ?? false;
 }
 
+// Helper: verifica si un familiar puede ver una sección de la ficha del paciente
+// Secciones: medicamentos | citas | tareas | sintomas | signos | contactos | notas | documentos
+async function checkB2BFamiliarCanSee(b2bUser, section) {
+    if (b2bUser.rol !== 'familiar') return true; // para otros roles, esta función no aplica
+    const defaults = {
+        medicamentos: true,
+        citas:        true,
+        tareas:       true,
+        sintomas:     true,
+        signos:       true,
+        contactos:    true,
+        notas:        false,
+        documentos:   true,
+    };
+    try {
+        const r = await pool.query('SELECT permisos_equipo FROM instituciones_b2b WHERE id=$1', [b2bUser.institucion_id]);
+        const perms = r.rows[0]?.permisos_equipo || {};
+        const key = `familiar_ver_${section}`;
+        if (key in perms) return !!perms[key];
+    } catch {}
+    return defaults[section] ?? false;
+}
+
 // ---------- B2B: AUTH ----------
 
 // POST /api/b2b/auth/register — registrar institución + primer admin
-app.post('/api/b2b/auth/register', async (req, res) => {
+app.post('/api/b2b/auth/register', authRateLimit, async (req, res) => {
     try {
         const { nombre_institucion, tipo_institucion, nombre_admin, email, password, telefono } = req.body;
         if (!nombre_institucion || !email || !password || !nombre_admin)
@@ -2478,8 +3165,9 @@ app.post('/api/b2b/auth/register', async (req, res) => {
         if (exists.rowCount > 0) return res.status(409).json({ error: 'El email ya está registrado' });
 
         const inst = await pool.query(
-            'INSERT INTO instituciones_b2b (nombre, tipo, telefono) VALUES ($1,$2,$3) RETURNING id',
-            [nombre_institucion, tipo_institucion || 'geriatrico', telefono || null]
+            `INSERT INTO instituciones_b2b (nombre, tipo, telefono, email, plan, trial_started_at)
+             VALUES ($1,$2,$3,$4,'free',NOW()) RETURNING id, plan`,
+            [nombre_institucion, tipo_institucion || 'geriatrico', telefono || null, email.toLowerCase()]
         );
         const institucion_id = inst.rows[0].id;
 
@@ -2565,7 +3253,7 @@ app.post('/api/b2b/auth/register', async (req, res) => {
         } // end if !isTestEmail && emailVerifiedFinal === false
 
         const token = jwt.sign(
-            { id: user.rows[0].id, institucion_id, rol: 'admin_institucion', email: user.rows[0].email, nombre: user.rows[0].nombre, b2b: true },
+            { id: user.rows[0].id, institucion_id, rol: 'admin_institucion', email: user.rows[0].email, nombre: user.rows[0].nombre, b2b: true, email_verified: emailVerifiedFinal },
             JWT_SECRET, { expiresIn: '30d' }
         );
         res.status(201).json({
@@ -2577,7 +3265,7 @@ app.post('/api/b2b/auth/register', async (req, res) => {
                 rol: user.rows[0].rol,
                 institucion_id,
                 institucion_nombre: nombre_institucion,
-                plan: 'free',
+                plan: inst.rows[0].plan,
                 institucion_permisos: {},
                 onboarding_done: false,
                 email_verified: emailVerifiedFinal
@@ -2590,13 +3278,13 @@ app.post('/api/b2b/auth/register', async (req, res) => {
 });
 
 // POST /api/b2b/auth/login
-app.post('/api/b2b/auth/login', async (req, res) => {
+app.post('/api/b2b/auth/login', authRateLimit, async (req, res) => {
     try {
         const { email, password } = req.body;
         if (!email || !password) return res.status(400).json({ error: 'Email y contraseña requeridos' });
 
         const result = await pool.query(
-            `SELECT u.*, i.nombre as institucion_nombre, i.plan, i.activa as institucion_activa, i.permisos_equipo, i.onboarding_done
+            `SELECT u.*, i.nombre as institucion_nombre, i.plan, i.activa as institucion_activa, i.permisos_equipo, i.onboarding_done, i.stock_modelo, i.shared_mode, i.trial_started_at, i.discount_expires_at
              FROM usuarios_b2b u JOIN instituciones_b2b i ON u.institucion_id = i.id
              WHERE u.email = $1`,
             [email.toLowerCase()]
@@ -2611,10 +3299,10 @@ app.post('/api/b2b/auth/login', async (req, res) => {
         if (!valid) return res.status(401).json({ error: 'Credenciales inválidas' });
 
         const token = jwt.sign(
-            { id: user.id, institucion_id: user.institucion_id, rol: user.rol, email: user.email, nombre: user.nombre, b2b: true },
+            { id: user.id, institucion_id: user.institucion_id, rol: user.rol, email: user.email, nombre: user.nombre, b2b: true, email_verified: !!user.email_verified },
             JWT_SECRET, { expiresIn: '30d' }
         );
-        res.json({ token, user: { id: user.id, nombre: user.nombre, email: user.email, rol: user.rol, institucion_id: user.institucion_id, institucion_nombre: user.institucion_nombre, plan: user.plan, institucion_permisos: user.permisos_equipo || {}, onboarding_done: !!user.onboarding_done, email_verified: !!user.email_verified } });
+        res.json({ token, user: { id: user.id, nombre: user.nombre, email: user.email, rol: user.rol, institucion_id: user.institucion_id, institucion_nombre: user.institucion_nombre, plan: user.plan, institucion_permisos: user.permisos_equipo || {}, onboarding_done: !!user.onboarding_done, email_verified: !!user.email_verified, stock_modelo: user.stock_modelo || 'familiar', shared_mode: !!user.shared_mode, trial_started_at: user.trial_started_at || null, notif_prefs: user.notif_prefs || {}, discount_expires_at: user.discount_expires_at || null } });
     } catch (err) {
         console.error('POST /api/b2b/auth/login:', err.message);
         res.status(500).json({ error: 'Error al iniciar sesión' });
@@ -2625,14 +3313,16 @@ app.post('/api/b2b/auth/login', async (req, res) => {
 app.get('/api/b2b/auth/me', authB2BMiddleware, async (req, res) => {
     try {
         const result = await pool.query(
-            `SELECT u.id, u.nombre, u.email, u.rol, u.created_at,
-                    i.id as institucion_id, i.nombre as institucion_nombre, i.tipo, i.plan, i.direccion, i.telefono
+            `SELECT u.id, u.nombre, u.email, u.rol, u.created_at, u.email_verified,
+                    i.id as institucion_id, i.nombre as institucion_nombre, i.tipo, i.plan, i.direccion, i.telefono,
+                    i.stock_modelo, i.shared_mode, i.trial_started_at, i.permisos_equipo
              FROM usuarios_b2b u JOIN instituciones_b2b i ON u.institucion_id = i.id
              WHERE u.id = $1`,
             [req.b2bUser.id]
         );
         if (result.rowCount === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
-        res.json(result.rows[0]);
+        const meRow = result.rows[0];
+        res.json({ ...meRow, institucion_permisos: meRow.permisos_equipo || {} });
     } catch (err) {
         console.error('GET /api/b2b/auth/me:', err.message);
         res.status(500).json({ error: 'Error al obtener perfil' });
@@ -2667,8 +3357,33 @@ app.patch('/api/b2b/auth/me', authB2BMiddleware, async (req, res) => {
     }
 });
 
+// GET /api/b2b/me/notif-prefs — Obtener preferencias de alertas del dashboard
+app.get('/api/b2b/me/notif-prefs', authB2BMiddleware, async (req, res) => {
+    try {
+        const r = await pool.query('SELECT notif_prefs FROM usuarios_b2b WHERE id=$1', [req.b2bUser.id]);
+        res.json(r.rows[0]?.notif_prefs || {});
+    } catch (err) {
+        console.error('GET /api/b2b/me/notif-prefs:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PATCH /api/b2b/me/notif-prefs — Guardar preferencias de alertas del dashboard
+app.patch('/api/b2b/me/notif-prefs', authB2BMiddleware, async (req, res) => {
+    try {
+        const prefs = req.body;
+        if (typeof prefs !== 'object' || Array.isArray(prefs))
+            return res.status(400).json({ error: 'Formato de preferencias inválido' });
+        await pool.query('UPDATE usuarios_b2b SET notif_prefs=$1 WHERE id=$2', [JSON.stringify(prefs), req.b2bUser.id]);
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('PATCH /api/b2b/me/notif-prefs:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // POST /api/b2b/auth/forgot-password
-app.post('/api/b2b/auth/forgot-password', async (req, res) => {
+app.post('/api/b2b/auth/forgot-password', authRateLimit, async (req, res) => {
     try {
         const { email } = req.body;
         const user = await pool.query('SELECT * FROM usuarios_b2b WHERE email=$1', [email.toLowerCase()]);
@@ -2725,7 +3440,47 @@ app.get('/api/b2b/auth/verify-email', async (req, res) => {
             [result.rows[0].id]
         );
         console.log(`[B2B] Email verificado: ${result.rows[0].email} (id=${result.rows[0].id})`);
-        res.json({ success: true, message: 'Email confirmado correctamente. Ya podés usar todas las funciones de CuidaDiario PRO.' });
+
+        // Emitir un JWT fresco con email_verified=true para que el onboarding no quede bloqueado.
+        // Sin esto, el JWT original (emitido al registrarse) tenía email_verified:false y el
+        // middleware bloqueaba la llamada de updateInstitucion al finalizar el onboarding (→ loop).
+        let freshToken = null;
+        let freshUser  = null;
+        try {
+            const userRow = await pool.query(
+                `SELECT u.id, u.nombre, u.email, u.rol, u.email_verified, u.notif_prefs,
+                        i.id AS institucion_id, i.nombre AS institucion_nombre, i.plan,
+                        i.permisos_equipo, i.onboarding_done, i.stock_modelo,
+                        i.shared_mode, i.trial_started_at, i.discount_expires_at
+                 FROM usuarios_b2b u
+                 JOIN instituciones_b2b i ON i.id = u.institucion_id
+                 WHERE u.id = $1`,
+                [result.rows[0].id]
+            );
+            if (userRow.rowCount > 0) {
+                const u = userRow.rows[0];
+                freshToken = jwt.sign(
+                    { id: u.id, institucion_id: u.institucion_id, rol: u.rol,
+                      email: u.email, nombre: u.nombre, b2b: true, email_verified: true },
+                    JWT_SECRET, { expiresIn: '30d' }
+                );
+                freshUser = {
+                    id: u.id, nombre: u.nombre, email: u.email, rol: u.rol,
+                    institucion_id: u.institucion_id, institucion_nombre: u.institucion_nombre,
+                    plan: u.plan, institucion_permisos: u.permisos_equipo || {},
+                    onboarding_done: !!u.onboarding_done, email_verified: true,
+                    stock_modelo: u.stock_modelo || 'familiar', shared_mode: !!u.shared_mode,
+                    trial_started_at: u.trial_started_at || null,
+                    notif_prefs: u.notif_prefs || {},
+                    discount_expires_at: u.discount_expires_at || null
+                };
+            }
+        } catch (tokenErr) {
+            // No fatal — el frontend puede seguir sin el token fresco (requerirá re-login)
+            console.warn('[B2B] No se pudo generar token fresco tras verificación:', tokenErr.message);
+        }
+
+        res.json({ success: true, message: 'Email confirmado correctamente. Ya podés usar todas las funciones de CuidaDiario PRO.', token: freshToken, user: freshUser });
     } catch (err) {
         console.error('GET /api/b2b/auth/verify-email:', err.message);
         res.status(500).json({ error: 'Error al verificar email' });
@@ -2795,9 +3550,18 @@ app.post('/api/b2b/auth/resend-verification', authB2BMiddleware, async (req, res
 // GET /api/b2b/institucion
 app.get('/api/b2b/institucion', authB2BMiddleware, async (req, res) => {
     try {
-        const result = await pool.query('SELECT * FROM instituciones_b2b WHERE id=$1', [req.b2bUser.institucion_id]);
+        const result = await pool.query(
+            `SELECT i.*,
+                (SELECT COUNT(*) FROM pacientes_b2b WHERE institucion_id=i.id AND activo=TRUE AND fecha_egreso IS NULL) AS pacientes_count,
+                (SELECT COUNT(*) FROM usuarios_b2b WHERE institucion_id=i.id AND activo=TRUE AND rol != 'familiar') AS staff_count
+             FROM instituciones_b2b i WHERE i.id=$1`,
+            [req.b2bUser.institucion_id]
+        );
         if (result.rowCount === 0) return res.status(404).json({ error: 'Institución no encontrada' });
-        res.json(result.rows[0]);
+        const inst = result.rows[0];
+        inst.pacientes_count = parseInt(inst.pacientes_count) || 0;
+        inst.staff_count = parseInt(inst.staff_count) || 0;
+        res.json(inst);
     } catch (err) {
         console.error('GET /api/b2b/institucion:', err.message);
         res.status(500).json({ error: 'Error al obtener institución' });
@@ -2807,17 +3571,19 @@ app.get('/api/b2b/institucion', authB2BMiddleware, async (req, res) => {
 // PATCH /api/b2b/institucion
 app.patch('/api/b2b/institucion', authB2BMiddleware, requireB2BRole('admin_institucion'), async (req, res) => {
     try {
-        const { nombre, tipo, direccion, telefono, email, stock_modelo, permisos_equipo, onboarding_done } = req.body;
+        const { nombre, tipo, direccion, telefono, email, stock_modelo, permisos_equipo, onboarding_done, shared_mode } = req.body;
         await pool.query(
             `UPDATE instituciones_b2b SET nombre=COALESCE($1,nombre), tipo=COALESCE($2,tipo),
              direccion=COALESCE($3,direccion), telefono=COALESCE($4,telefono), email=COALESCE($5,email),
              stock_modelo=COALESCE($6,stock_modelo),
              permisos_equipo=COALESCE($7::jsonb,permisos_equipo),
-             onboarding_done=COALESCE($9,onboarding_done) WHERE id=$8`,
+             onboarding_done=COALESCE($9,onboarding_done),
+             shared_mode=COALESCE($10,shared_mode) WHERE id=$8`,
             [nombre, tipo, direccion, telefono, email, stock_modelo,
              permisos_equipo ? JSON.stringify(permisos_equipo) : null,
              req.b2bUser.institucion_id,
-             onboarding_done !== undefined ? onboarding_done : null]
+             onboarding_done !== undefined ? onboarding_done : null,
+             shared_mode !== undefined ? shared_mode : null]
         );
         res.json({ success: true });
     } catch (err) {
@@ -2829,7 +3595,17 @@ app.patch('/api/b2b/institucion', authB2BMiddleware, requireB2BRole('admin_insti
 // ---------- B2B: STAFF ----------
 
 // GET /api/b2b/staff
-app.get('/api/b2b/staff', authB2BMiddleware, requireB2BRole('admin_institucion'), async (req, res) => {
+// Admin: acceso completo. Medico/cuidador_staff: ver_staff, crear_staff o asignar_paciente.
+app.get('/api/b2b/staff', authB2BMiddleware, async (req, res) => {
+    if (req.b2bUser.rol !== 'admin_institucion') {
+        const [canView, canCreate, canAssign] = await Promise.all([
+            checkB2BCanDo(req.b2bUser, 'ver_staff'),
+            checkB2BCanDo(req.b2bUser, 'crear_staff'),
+            checkB2BCanDo(req.b2bUser, 'asignar_paciente'),
+        ]);
+        if (!canView && !canCreate && !canAssign)
+            return res.status(403).json({ error: 'No tenés permisos para ver el staff' });
+    }
     try {
         const result = await pool.query(
             'SELECT id, nombre, email, rol, activo, created_at FROM usuarios_b2b WHERE institucion_id=$1 ORDER BY nombre',
@@ -2843,19 +3619,68 @@ app.get('/api/b2b/staff', authB2BMiddleware, requireB2BRole('admin_institucion')
 });
 
 // POST /api/b2b/staff — crear miembro del staff
-app.post('/api/b2b/staff', authB2BMiddleware, requireB2BRole('admin_institucion'), async (req, res) => {
+app.post('/api/b2b/staff', authB2BMiddleware, async (req, res) => {
+    if (req.b2bUser.rol !== 'admin_institucion') {
+        const canCreate = await checkB2BCanDo(req.b2bUser, 'crear_staff');
+        if (!canCreate) return res.status(403).json({ error: 'No tenés permisos para agregar personal', code: 'FORBIDDEN' });
+    }
     try {
         const { nombre, email, password, rol } = req.body;
         if (!nombre || !email || !password) return res.status(400).json({ error: 'Faltan datos obligatorios' });
         const exists = await pool.query('SELECT id FROM usuarios_b2b WHERE email=$1', [email.toLowerCase()]);
         if (exists.rowCount > 0) return res.status(409).json({ error: 'El email ya está registrado' });
+        // Verificar límite de plan y expiración del trial
+        const planCheck = await checkInstPlanForAction(req.b2bUser.institucion_id, 'crear_staff');
+        if (!planCheck.allowed) return res.status(planCheck.code === 'TRIAL_EXPIRED' ? 402 : 403).json({ error: planCheck.error, code: planCheck.code });
         const hash = await bcrypt.hash(password, SALT_ROUNDS);
         const validRoles = ['cuidador_staff', 'familiar', 'medico', 'admin_institucion'];
         const userRol = validRoles.includes(rol) ? rol : 'cuidador_staff';
+        // email_verified=TRUE: el admin confía en el email que ingresó, no se envía verificación
         const result = await pool.query(
-            `INSERT INTO usuarios_b2b (institucion_id, nombre, email, password_hash, rol) VALUES ($1,$2,$3,$4,$5) RETURNING id, nombre, email, rol`,
+            `INSERT INTO usuarios_b2b (institucion_id, nombre, email, password_hash, rol, email_verified) VALUES ($1,$2,$3,$4,$5,TRUE) RETURNING id, nombre, email, rol`,
             [req.b2bUser.institucion_id, nombre, email.toLowerCase(), hash, userRol]
         );
+        // Enviar email de bienvenida al nuevo miembro del staff
+        try {
+            const instRes2 = await pool.query('SELECT nombre FROM instituciones_b2b WHERE id=$1', [req.b2bUser.institucion_id]);
+            const instNombre = instRes2.rows[0]?.nombre || 'tu institución';
+            const rolLabels = { admin_institucion: 'Administrador', cuidador_staff: 'Personal / Operativo', familiar: 'Familiar (solo lectura)', medico: 'Médico / Profesional' };
+            const rolLabel = rolLabels[userRol] || userRol;
+            const loginUrl = `${FRONTEND_URL_PRO}/index.html`;
+            await sendEmail({
+                to: email.toLowerCase(),
+                subject: `¡Bienvenido/a a CuidaDiario PRO! Tu cuenta está lista`,
+                html: `
+                    <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #E5E7EB">
+                        <div style="background:linear-gradient(135deg,#0D2B6B,#1565C0);padding:28px 32px;text-align:center">
+                            <div style="font-size:2.5rem;margin-bottom:8px">🏥</div>
+                            <div style="color:#fff;font-size:1.3rem;font-weight:800">CuidaDiario PRO</div>
+                        </div>
+                        <div style="padding:28px 32px">
+                            <h2 style="font-size:1.2rem;color:#1F2937;margin-bottom:12px">¡Hola ${nombre}!</h2>
+                            <p style="color:#374151;line-height:1.6;margin-bottom:16px">
+                                El administrador de <strong>${instNombre}</strong> creó tu cuenta en <strong>CuidaDiario PRO</strong>.
+                                Ya podés iniciar sesión con tus credenciales.
+                            </p>
+                            <div style="background:#F0F4FF;border-radius:10px;padding:16px 20px;margin-bottom:20px">
+                                <div style="font-size:.85rem;color:#4B5563;margin-bottom:6px;font-weight:600">Tus datos de acceso:</div>
+                                <div style="color:#1E40AF;margin-bottom:4px">📧 <strong>Email:</strong> ${email.toLowerCase()}</div>
+                                <div style="color:#1E40AF;margin-bottom:4px">🔑 <strong>Contraseña:</strong> la que te compartió el administrador</div>
+                                <div style="color:#1E40AF">👤 <strong>Rol:</strong> ${rolLabel}</div>
+                            </div>
+                            <a href="${loginUrl}" style="display:block;background:#1565C0;color:#fff;text-decoration:none;text-align:center;padding:14px 24px;border-radius:8px;font-weight:700;font-size:1rem;margin-bottom:20px">
+                                Iniciar sesión →
+                            </a>
+                            <p style="font-size:.82rem;color:#9CA3AF">
+                                Si no esperabas este mensaje, ignoralo sin problema.<br>
+                                ¿Necesitás ayuda? <a href="mailto:edensoftwarework@gmail.com" style="color:#1565C0">edensoftwarework@gmail.com</a>
+                            </p>
+                        </div>
+                    </div>`
+            });
+        } catch (emailErr) {
+            console.warn('POST /api/b2b/staff — email de bienvenida no enviado:', emailErr.message);
+        }
         res.status(201).json(result.rows[0]);
     } catch (err) {
         console.error('POST /api/b2b/staff:', err.message);
@@ -2867,10 +3692,18 @@ app.post('/api/b2b/staff', authB2BMiddleware, requireB2BRole('admin_institucion'
 app.patch('/api/b2b/staff/:id', authB2BMiddleware, requireB2BRole('admin_institucion'), async (req, res) => {
     try {
         const { id } = req.params;
-        const { nombre, rol, activo, password } = req.body;
+        const { nombre, email, rol, activo, password } = req.body;
         const check = await pool.query('SELECT id FROM usuarios_b2b WHERE id=$1 AND institucion_id=$2', [id, req.b2bUser.institucion_id]);
         if (check.rowCount === 0) return res.status(404).json({ error: 'Staff no encontrado' });
         if (nombre) await pool.query('UPDATE usuarios_b2b SET nombre=$1 WHERE id=$2', [nombre, id]);
+        if (email) {
+            const emailLower = email.toLowerCase().trim();
+            const conflict = await pool.query('SELECT id FROM usuarios_b2b WHERE email=$1 AND id<>$2', [emailLower, id]);
+            if (conflict.rowCount > 0) return res.status(409).json({ error: 'El email ya está en uso por otro usuario' });
+            await pool.query('UPDATE usuarios_b2b SET email=$1 WHERE id=$2', [emailLower, id]);
+        }
+        const VALID_STAFF_ROLES = ['medico', 'cuidador_staff', 'familiar'];
+        if (rol && !VALID_STAFF_ROLES.includes(rol)) return res.status(400).json({ error: 'Rol inválido. Valores permitidos: medico, cuidador_staff, familiar' });
         if (rol) await pool.query('UPDATE usuarios_b2b SET rol=$1 WHERE id=$2', [rol, id]);
         if (activo !== undefined) await pool.query('UPDATE usuarios_b2b SET activo=$1 WHERE id=$2', [activo, id]);
         if (password) { const h = await bcrypt.hash(password, SALT_ROUNDS); await pool.query('UPDATE usuarios_b2b SET password_hash=$1 WHERE id=$2', [h, id]); }
@@ -2900,14 +3733,50 @@ app.delete('/api/b2b/staff/:id', authB2BMiddleware, requireB2BRole('admin_instit
 // GET /api/b2b/pacientes
 app.get('/api/b2b/pacientes', authB2BMiddleware, async (req, res) => {
     try {
+        const { rol, institucion_id, id } = req.b2bUser;
+
+        // Admin siempre ve todos los pacientes de la institución
+        if (rol === 'admin_institucion') {
+            const result = await pool.query(
+                'SELECT * FROM pacientes_b2b WHERE institucion_id=$1 AND activo=TRUE ORDER BY apellido, nombre',
+                [institucion_id]
+            );
+            return res.json(result.rows);
+        }
+
+        // Familiar: siempre solo ve los pacientes que tiene asignados (nunca todos).
+        // Si cae en el bloque verTodos de abajo, obtendría todos los pacientes porque
+        // 'familiar_ver_todos_pacientes' no está en perms → verTodos queda true → BUG.
+        if (rol === 'familiar') {
+            const result = await pool.query(
+                `SELECT p.* FROM pacientes_b2b p JOIN asignaciones_b2b a ON a.paciente_id = p.id
+                 WHERE a.cuidador_id=$1 AND a.activa=TRUE AND p.activo=TRUE ORDER BY p.apellido, p.nombre`,
+                [id]
+            );
+            return res.json(result.rows);
+        }
+
+        // Medico y cuidador_staff: verificar el permiso ver_todos_pacientes de la institución.
+        // Por defecto es TRUE (ve todos). El admin puede desactivarlo por rol.
+        let verTodos = true;
+        try {
+            const instRow = await pool.query('SELECT permisos_equipo FROM instituciones_b2b WHERE id=$1', [institucion_id]);
+            const perms = instRow.rows[0]?.permisos_equipo || {};
+            const permKey = `${rol}_ver_todos_pacientes`;
+            if (permKey in perms) verTodos = !!perms[permKey];
+        } catch (_) { /* si falla, usamos el default true */ }
+
+        // mis_asignados=1: fuerza filtro por asignaciones del usuario (ej: "Mis residentes" en cuidador.html),
+        // ignorando ver_todos_pacientes. Así el cuidador ve solo sus asignados aunque tenga verTodos=true.
+        const misAsignados = req.query.mis_asignados === '1';
         let query, params;
-        if (req.b2bUser.rol === 'admin_institucion' || req.b2bUser.rol === 'medico') {
+        if (verTodos && !misAsignados) {
             query = 'SELECT * FROM pacientes_b2b WHERE institucion_id=$1 AND activo=TRUE ORDER BY apellido, nombre';
-            params = [req.b2bUser.institucion_id];
+            params = [institucion_id];
         } else {
             query = `SELECT p.* FROM pacientes_b2b p JOIN asignaciones_b2b a ON a.paciente_id = p.id
                      WHERE a.cuidador_id=$1 AND a.activa=TRUE AND p.activo=TRUE ORDER BY p.apellido, p.nombre`;
-            params = [req.b2bUser.id];
+            params = [id];
         }
         const result = await pool.query(query, params);
         res.json(result.rows);
@@ -2921,19 +3790,12 @@ app.get('/api/b2b/pacientes', authB2BMiddleware, async (req, res) => {
 app.get('/api/b2b/pacientes/:id', authB2BMiddleware, async (req, res) => {
     try {
         const { id } = req.params;
-        let result;
-        if (req.b2bUser.rol === 'admin_institucion' || req.b2bUser.rol === 'medico') {
-            result = await pool.query(
-                'SELECT * FROM pacientes_b2b WHERE id=$1 AND institucion_id=$2 AND activo=TRUE',
-                [id, req.b2bUser.institucion_id]
-            );
-        } else {
-            result = await pool.query(
-                `SELECT p.* FROM pacientes_b2b p JOIN asignaciones_b2b a ON a.paciente_id = p.id
-                 WHERE p.id=$1 AND a.cuidador_id=$2 AND a.activa=TRUE AND p.activo=TRUE`,
-                [id, req.b2bUser.id]
-            );
-        }
+        const hasAccess = await checkB2BPacienteAccess(req.b2bUser, parseInt(id));
+        if (!hasAccess) return res.status(404).json({ error: 'Paciente no encontrado' });
+        const result = await pool.query(
+            'SELECT * FROM pacientes_b2b WHERE id=$1 AND institucion_id=$2 AND activo=TRUE',
+            [id, req.b2bUser.institucion_id]
+        );
         if (result.rowCount === 0) return res.status(404).json({ error: 'Paciente no encontrado' });
         res.json(result.rows[0]);
     } catch (err) {
@@ -2947,6 +3809,9 @@ app.post('/api/b2b/pacientes', authB2BMiddleware, async (req, res) => {
     try {
         if (!await checkB2BCanDo(req.b2bUser, 'crear_paciente'))
             return res.status(403).json({ error: 'No tenés permisos para crear pacientes' });
+        // Verificar límite de plan y expiración del trial
+        const planCheck = await checkInstPlanForAction(req.b2bUser.institucion_id, 'crear_paciente');
+        if (!planCheck.allowed) return res.status(planCheck.code === 'TRIAL_EXPIRED' ? 402 : 403).json({ error: planCheck.error, code: planCheck.code });
         const { nombre, apellido, fecha_nacimiento, dni, habitacion, diagnostico, obra_social, num_afiliado, contacto_familiar_nombre, contacto_familiar_tel, notas_ingreso, fecha_ingreso, alergias, medico_cabecera, antecedentes } = req.body;
         if (!nombre) return res.status(400).json({ error: 'El nombre es obligatorio' });
         const result = await pool.query(
@@ -3001,7 +3866,16 @@ app.delete('/api/b2b/pacientes/:id', authB2BMiddleware, async (req, res) => {
 // ---------- B2B: ASIGNACIONES ----------
 
 // GET /api/b2b/asignaciones
-app.get('/api/b2b/asignaciones', authB2BMiddleware, requireB2BRole('admin_institucion'), async (req, res) => {
+app.get('/api/b2b/asignaciones', authB2BMiddleware, async (req, res) => {
+    // Admin siempre puede verlas; no-admin necesita ver_staff o asignar_paciente
+    if (req.b2bUser.rol !== 'admin_institucion') {
+        const [canView, canAssign] = await Promise.all([
+            checkB2BCanDo(req.b2bUser, 'ver_staff'),
+            checkB2BCanDo(req.b2bUser, 'asignar_paciente'),
+        ]);
+        if (!canView && !canAssign)
+            return res.status(403).json({ error: 'No tenés permisos para ver las asignaciones' });
+    }
     try {
         const result = await pool.query(
             `SELECT a.*, u.nombre as cuidador_nombre, u.rol as cuidador_rol,
@@ -3018,7 +3892,11 @@ app.get('/api/b2b/asignaciones', authB2BMiddleware, requireB2BRole('admin_instit
 });
 
 // POST /api/b2b/asignaciones
-app.post('/api/b2b/asignaciones', authB2BMiddleware, requireB2BRole('admin_institucion'), async (req, res) => {
+app.post('/api/b2b/asignaciones', authB2BMiddleware, async (req, res) => {
+    if (req.b2bUser.rol !== 'admin_institucion') {
+        const canAssign = await checkB2BCanDo(req.b2bUser, 'asignar_paciente');
+        if (!canAssign) return res.status(403).json({ error: 'No tenés permisos para gestionar asignaciones', code: 'FORBIDDEN' });
+    }
     try {
         const { cuidador_id, paciente_id } = req.body;
         if (!cuidador_id || !paciente_id) return res.status(400).json({ error: 'cuidador_id y paciente_id requeridos' });
@@ -3041,7 +3919,11 @@ app.post('/api/b2b/asignaciones', authB2BMiddleware, requireB2BRole('admin_insti
 });
 
 // DELETE /api/b2b/asignaciones/:id
-app.delete('/api/b2b/asignaciones/:id', authB2BMiddleware, requireB2BRole('admin_institucion'), async (req, res) => {
+app.delete('/api/b2b/asignaciones/:id', authB2BMiddleware, async (req, res) => {
+    if (req.b2bUser.rol !== 'admin_institucion') {
+        const canAssign = await checkB2BCanDo(req.b2bUser, 'asignar_paciente');
+        if (!canAssign) return res.status(403).json({ error: 'No tenés permisos para gestionar asignaciones', code: 'FORBIDDEN' });
+    }
     try {
         await pool.query('UPDATE asignaciones_b2b SET activa=FALSE WHERE id=$1 AND institucion_id=$2', [req.params.id, req.b2bUser.institucion_id]);
         res.json({ success: true });
@@ -3057,6 +3939,10 @@ app.delete('/api/b2b/asignaciones/:id', authB2BMiddleware, requireB2BRole('admin
 app.get('/api/b2b/medicamentos/historial', authB2BMiddleware, async (req, res) => {
     try {
         const { paciente_id } = req.query;
+        if (req.b2bUser.rol === 'familiar' && !(await checkB2BFamiliarCanSee(req.b2bUser, 'medicamentos')))
+            return res.status(403).json({ error: 'Acceso restringido por la institución' });
+        if (paciente_id && !(await checkB2BPacienteAccess(req.b2bUser, parseInt(paciente_id))))
+            return res.status(403).json({ error: 'Sin acceso a este paciente' });
         let query = 'SELECT * FROM historial_medicamentos_b2b WHERE institucion_id=$1';
         const params = [req.b2bUser.institucion_id];
         if (paciente_id) { query += ` AND paciente_id=$2`; params.push(paciente_id); }
@@ -3072,6 +3958,10 @@ app.get('/api/b2b/medicamentos/historial', authB2BMiddleware, async (req, res) =
 app.get('/api/b2b/medicamentos', authB2BMiddleware, async (req, res) => {
     try {
         const { paciente_id } = req.query;
+        if (req.b2bUser.rol === 'familiar' && !(await checkB2BFamiliarCanSee(req.b2bUser, 'medicamentos')))
+            return res.status(403).json({ error: 'Acceso restringido por la institución' });
+        if (paciente_id && !(await checkB2BPacienteAccess(req.b2bUser, parseInt(paciente_id))))
+            return res.status(403).json({ error: 'Sin acceso a este paciente' });
         let query = `SELECT m.*,
                      c.nombre AS catalogo_nombre, c.stock_actual AS catalogo_stock,
                      c.stock_minimo AS catalogo_stock_minimo, c.unidad AS catalogo_unidad
@@ -3089,7 +3979,7 @@ app.get('/api/b2b/medicamentos', authB2BMiddleware, async (req, res) => {
 });
 
 // POST /api/b2b/medicamentos
-app.post('/api/b2b/medicamentos', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff'), async (req, res) => {
+app.post('/api/b2b/medicamentos', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff','medico'), requireActivePlan, async (req, res) => {
     try {
         const { paciente_id, nombre, dosis, frecuencia, hora_inicio, hora_fin, horarios_custom, instrucciones, stock, catalogo_id } = req.body;
         if (!paciente_id || !nombre) return res.status(400).json({ error: 'paciente_id y nombre obligatorios' });
@@ -3107,32 +3997,52 @@ app.post('/api/b2b/medicamentos', authB2BMiddleware, requireB2BRole('admin_insti
 });
 
 // POST /api/b2b/medicamentos/:id/toma
-app.post('/api/b2b/medicamentos/:id/toma', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff'), async (req, res) => {
+app.post('/api/b2b/medicamentos/:id/toma', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff','medico'), requireActivePlan, async (req, res) => {
     try {
         const med = await pool.query('SELECT * FROM medicamentos_b2b WHERE id=$1 AND institucion_id=$2', [req.params.id, req.b2bUser.institucion_id]);
         if (med.rowCount === 0) return res.status(404).json({ error: 'Medicamento no encontrado' });
         const m = med.rows[0];
-        // Register the toma in history
-        const _adminNombre = (req.body._quien && typeof req.body._quien === 'string' && req.body._quien.trim()) ? req.body._quien.trim() : req.b2bUser.nombre;
-        const result = await pool.query(
-            `INSERT INTO historial_medicamentos_b2b (institucion_id, paciente_id, medicamento_id, medicamento_nombre, dosis, administrado_por, administrador_nombre, notas)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-            [req.b2bUser.institucion_id, m.paciente_id, m.id, m.nombre, m.dosis, req.b2bUser.id, _adminNombre, req.body.notas||null]
-        );
-        // Auto-decrement stock based on institution model
-        const instRow = await pool.query('SELECT stock_modelo FROM instituciones_b2b WHERE id=$1', [req.b2bUser.institucion_id]);
-        const stockModelo = instRow.rows[0]?.stock_modelo || 'familiar';
-        if (stockModelo === 'institucion' && m.catalogo_id) {
-            // Decrement global catalog stock (never below 0)
-            await pool.query(
-                'UPDATE catalogo_medicamentos_b2b SET stock_actual = GREATEST(0, stock_actual - 1), updated_at = NOW() WHERE id=$1 AND institucion_id=$2',
+        const cantidad = Math.max(1, parseInt(req.body.cantidad) || 1);
+
+        // STOCK GUARD: block toma if there is no stock remaining
+        // Hybrid model: if linked to a catalog item, check catalog stock regardless of stock_modelo field
+        if (m.catalogo_id) {
+            const catRow = await pool.query(
+                'SELECT stock_actual FROM catalogo_medicamentos_b2b WHERE id=$1 AND institucion_id=$2',
                 [m.catalogo_id, req.b2bUser.institucion_id]
             );
-        } else if (m.stock !== null && m.stock > 0) {
-            // Decrement per-patient stock (familiar model or non-cataloged)
+            const catStock = catRow.rows[0]?.stock_actual ?? 0;
+            if (catStock < cantidad) {
+                return res.status(400).json({ error: 'Sin stock disponible en el cat\u00e1logo. Repon\u00e9 el insumo antes de registrar una toma.', code: 'STOCK_ZERO' });
+            }
+        } else if (m.stock !== null && m.stock < cantidad) {
+            return res.status(400).json({ error: 'Sin stock disponible. Actualiz\u00e1 el stock antes de registrar una toma.', code: 'STOCK_ZERO' });
+        }
+
+        // Register the toma in history.
+        // Use NOW() AT TIME ZONE 'America/Argentina/Buenos_Aires' so the stored naive
+        // TIMESTAMP reflects local Argentine time and displays correctly on the frontend.
+        const _adminNombre = (req.body._quien && typeof req.body._quien === 'string' && req.body._quien.trim()) ? req.body._quien.trim() : req.b2bUser.nombre;
+        // Use the client-side timestamp when the action was performed offline; fall back to server NOW().
+        const _fecha = utcIsoToArgentinaNaive(req.body._offline_ts);
+        const result = await pool.query(
+            `INSERT INTO historial_medicamentos_b2b
+             (institucion_id, paciente_id, medicamento_id, medicamento_nombre, dosis, administrado_por, administrador_nombre, notas, cantidad, fecha)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, COALESCE($10, NOW() AT TIME ZONE 'America/Argentina/Buenos_Aires')) RETURNING *`,
+            [req.b2bUser.institucion_id, m.paciente_id, m.id, m.nombre, m.dosis, req.b2bUser.id, _adminNombre, req.body.notas||null, cantidad, _fecha]
+        );
+        // Auto-decrement stock — hybrid model: catalog wins when linked, else per-patient/individual stock
+        if (m.catalogo_id) {
+            // Decrement catalog stock (institutional or patient-specific), never below 0
             await pool.query(
-                'UPDATE medicamentos_b2b SET stock = GREATEST(0, stock - 1) WHERE id=$1 AND institucion_id=$2',
-                [m.id, req.b2bUser.institucion_id]
+                'UPDATE catalogo_medicamentos_b2b SET stock_actual = GREATEST(0, stock_actual - $3), updated_at = NOW() WHERE id=$1 AND institucion_id=$2',
+                [m.catalogo_id, req.b2bUser.institucion_id, cantidad]
+            );
+        } else if (m.stock !== null && m.stock > 0) {
+            // Decrement individual/manual stock (non-cataloged)
+            await pool.query(
+                'UPDATE medicamentos_b2b SET stock = GREATEST(0, stock - $3) WHERE id=$1 AND institucion_id=$2',
+                [m.id, req.b2bUser.institucion_id, cantidad]
             );
         }
         res.status(201).json(result.rows[0]);
@@ -3143,7 +4053,7 @@ app.post('/api/b2b/medicamentos/:id/toma', authB2BMiddleware, requireB2BRole('ad
 });
 
 // PATCH /api/b2b/medicamentos/:id
-app.patch('/api/b2b/medicamentos/:id', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff'), async (req, res) => {
+app.patch('/api/b2b/medicamentos/:id', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff','medico'), async (req, res) => {
     try {
         const { nombre, dosis, frecuencia, hora_inicio, hora_fin, horarios_custom, instrucciones, stock, activo, catalogo_id } = req.body;
         // catalogo_id can be explicitly set to null (unlink) or a number (link), hence no COALESCE
@@ -3165,7 +4075,7 @@ app.patch('/api/b2b/medicamentos/:id', authB2BMiddleware, requireB2BRole('admin_
 });
 
 // DELETE /api/b2b/medicamentos/:id
-app.delete('/api/b2b/medicamentos/:id', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff'), async (req, res) => {
+app.delete('/api/b2b/medicamentos/:id', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff','medico'), async (req, res) => {
     try {
         await pool.query('UPDATE medicamentos_b2b SET activo=FALSE WHERE id=$1 AND institucion_id=$2', [req.params.id, req.b2bUser.institucion_id]);
         res.json({ success: true });
@@ -3178,10 +4088,14 @@ app.delete('/api/b2b/medicamentos/:id', authB2BMiddleware, requireB2BRole('admin
 // ---------- B2B: CATÁLOGO DE MEDICAMENTOS ----------
 
 // GET /api/b2b/catalogo/stock-bajo  (must come BEFORE /:id)
-app.get('/api/b2b/catalogo/stock-bajo', authB2BMiddleware, requireB2BRole('admin_institucion'), async (req, res) => {
+app.get('/api/b2b/catalogo/stock-bajo', authB2BMiddleware, requireB2BRole('admin_institucion','medico','cuidador_staff'), async (req, res) => {
     try {
         const result = await pool.query(
-            'SELECT * FROM catalogo_medicamentos_b2b WHERE institucion_id=$1 AND activo=TRUE AND stock_actual <= stock_minimo ORDER BY stock_actual ASC',
+            `SELECT c.*, p.nombre AS paciente_nombre, p.apellido AS paciente_apellido
+             FROM catalogo_medicamentos_b2b c
+             LEFT JOIN pacientes_b2b p ON c.paciente_id = p.id
+             WHERE c.institucion_id=$1 AND c.activo=TRUE AND c.stock_actual <= c.stock_minimo
+             ORDER BY c.stock_actual ASC`,
             [req.b2bUser.institucion_id]
         );
         res.json(result.rows);
@@ -3192,13 +4106,38 @@ app.get('/api/b2b/catalogo/stock-bajo', authB2BMiddleware, requireB2BRole('admin
 });
 
 // GET /api/b2b/catalogo
+// ?paciente_id=X → insumos específicos del paciente X
+// sin parámetro   → insumos institucionales (paciente_id IS NULL)
 app.get('/api/b2b/catalogo', authB2BMiddleware, async (req, res) => {
     try {
-        const result = await pool.query(
-            'SELECT * FROM catalogo_medicamentos_b2b WHERE institucion_id=$1 AND activo=TRUE ORDER BY nombre',
-            [req.b2bUser.institucion_id]
-        );
-        res.json(result.rows);
+        const { paciente_id } = req.query;
+
+        // Familiar: solo puede ver insumos específicos de sus pacientes asignados
+        if (req.b2bUser.rol === 'familiar') {
+            if (!paciente_id) return res.json([]); // sin inventario institucional
+            const acc = await pool.query(
+                'SELECT id FROM asignaciones_b2b WHERE cuidador_id=$1 AND paciente_id=$2 AND activa=TRUE',
+                [req.b2bUser.id, paciente_id]
+            );
+            if (acc.rowCount === 0) return res.status(403).json({ error: 'No tenés acceso a este paciente' });
+        }
+
+        let query, params;
+        if (paciente_id) {
+            query = `SELECT c.*, p.nombre AS paciente_nombre, p.apellido AS paciente_apellido
+                     FROM catalogo_medicamentos_b2b c
+                     LEFT JOIN pacientes_b2b p ON c.paciente_id = p.id
+                     WHERE c.institucion_id=$1 AND c.activo=TRUE AND c.paciente_id=$2
+                     ORDER BY c.nombre`;
+            params = [req.b2bUser.institucion_id, paciente_id];
+        } else {
+            query = `SELECT c.*, NULL::TEXT AS paciente_nombre, NULL::TEXT AS paciente_apellido
+                     FROM catalogo_medicamentos_b2b c
+                     WHERE c.institucion_id=$1 AND c.activo=TRUE AND c.paciente_id IS NULL
+                     ORDER BY c.nombre`;
+            params = [req.b2bUser.institucion_id];
+        }
+        res.json((await pool.query(query, params)).rows);
     } catch (err) {
         console.error('GET /api/b2b/catalogo:', err.message);
         res.status(500).json({ error: 'Error al obtener catálogo' });
@@ -3206,14 +4145,20 @@ app.get('/api/b2b/catalogo', authB2BMiddleware, async (req, res) => {
 });
 
 // POST /api/b2b/catalogo
-app.post('/api/b2b/catalogo', authB2BMiddleware, requireB2BRole('admin_institucion'), async (req, res) => {
+app.post('/api/b2b/catalogo', authB2BMiddleware, requireB2BRole('admin_institucion','medico','cuidador_staff'), requireActivePlan, async (req, res) => {
     try {
-        const { nombre, principio_activo, presentacion, unidad, stock_actual, stock_minimo } = req.body;
+        if (!(await checkB2BCanDo(req.b2bUser, 'gestionar_catalogo'))) return res.status(403).json({ error: 'No tenés permiso para gestionar el catálogo. Solicitálo al administrador.' });
+        const { nombre, principio_activo, presentacion, unidad, stock_actual, stock_minimo, paciente_id } = req.body;
         if (!nombre) return res.status(400).json({ error: 'nombre obligatorio' });
+        // Si se especifica paciente_id, validar que pertenece a la institución
+        if (paciente_id) {
+            const pCheck = await pool.query('SELECT id FROM pacientes_b2b WHERE id=$1 AND institucion_id=$2', [paciente_id, req.b2bUser.institucion_id]);
+            if (pCheck.rowCount === 0) return res.status(403).json({ error: 'Paciente no pertenece a la institución' });
+        }
         const result = await pool.query(
-            `INSERT INTO catalogo_medicamentos_b2b (institucion_id, nombre, principio_activo, presentacion, unidad, stock_actual, stock_minimo)
-             VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-            [req.b2bUser.institucion_id, nombre, principio_activo||null, presentacion||null, unidad||'comprimido', stock_actual||0, stock_minimo||5]
+            `INSERT INTO catalogo_medicamentos_b2b (institucion_id, nombre, principio_activo, presentacion, unidad, stock_actual, stock_minimo, paciente_id)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+            [req.b2bUser.institucion_id, nombre, principio_activo||null, presentacion||null, unidad||'comprimido', stock_actual||0, stock_minimo||5, paciente_id||null]
         );
         res.status(201).json(result.rows[0]);
     } catch (err) {
@@ -3223,9 +4168,15 @@ app.post('/api/b2b/catalogo', authB2BMiddleware, requireB2BRole('admin_instituci
 });
 
 // PATCH /api/b2b/catalogo/:id
-app.patch('/api/b2b/catalogo/:id', authB2BMiddleware, requireB2BRole('admin_institucion'), async (req, res) => {
+app.patch('/api/b2b/catalogo/:id', authB2BMiddleware, requireB2BRole('admin_institucion','medico','cuidador_staff'), async (req, res) => {
     try {
-        const { nombre, principio_activo, presentacion, unidad, stock_actual, stock_minimo } = req.body;
+        if (!(await checkB2BCanDo(req.b2bUser, 'gestionar_catalogo'))) return res.status(403).json({ error: 'No tenés permiso para gestionar el catálogo. Solicitálo al administrador.' });
+        const { nombre, principio_activo, presentacion, unidad, stock_actual, stock_minimo, notas_restock } = req.body;
+        const iid = req.b2bUser.institucion_id;
+        // Fetch current state to detect stock changes for restock log
+        const curRes = await pool.query('SELECT * FROM catalogo_medicamentos_b2b WHERE id=$1 AND institucion_id=$2', [req.params.id, iid]);
+        if (curRes.rowCount === 0) return res.status(404).json({ error: 'Ítem no encontrado' });
+        const cur = curRes.rows[0];
         const result = await pool.query(
             `UPDATE catalogo_medicamentos_b2b
              SET nombre=COALESCE($1,nombre), principio_activo=COALESCE($2,principio_activo),
@@ -3233,13 +4184,48 @@ app.patch('/api/b2b/catalogo/:id', authB2BMiddleware, requireB2BRole('admin_inst
                  stock_actual=COALESCE($5,stock_actual), stock_minimo=COALESCE($6,stock_minimo),
                  updated_at=NOW()
              WHERE id=$7 AND institucion_id=$8 RETURNING *`,
-            [nombre, principio_activo, presentacion, unidad, stock_actual, stock_minimo, req.params.id, req.b2bUser.institucion_id]
+            [nombre, principio_activo, presentacion, unidad, stock_actual, stock_minimo, req.params.id, iid]
         );
-        if (result.rowCount === 0) return res.status(404).json({ error: 'Ítem no encontrado' });
+        // Log restock entry if stock_actual was increased
+        if (stock_actual !== undefined && stock_actual !== null) {
+            const prev = parseInt(cur.stock_actual) || 0;
+            const nuevo = parseInt(stock_actual);
+            if (!isNaN(nuevo) && nuevo > prev) {
+                await pool.query(
+                    `INSERT INTO historial_restock_b2b
+                     (institucion_id, catalogo_id, paciente_id, nombre_item, stock_anterior, cantidad_repuesta, stock_nuevo, notas, registrado_por, registrado_nombre)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+                    [iid, cur.id, cur.paciente_id || null, cur.nombre, prev, nuevo - prev, nuevo,
+                     notas_restock || null, req.b2bUser.id, req.b2bUser.nombre || null]
+                ).catch(e => console.error('restock log insert:', e.message));
+            }
+        }
         res.json(result.rows[0]);
     } catch (err) {
         console.error('PATCH /api/b2b/catalogo/:id:', err.message);
         res.status(500).json({ error: 'Error al actualizar ítem del catálogo' });
+    }
+});
+
+// GET /api/b2b/catalogo/restock-historial
+// ?catalogo_id=X → historial de un ítem específico
+// ?paciente_id=X → historial de todos los ítems de un paciente
+app.get('/api/b2b/catalogo/restock-historial', authB2BMiddleware, async (req, res) => {
+    try {
+        const { catalogo_id, paciente_id } = req.query;
+        const iid = req.b2bUser.institucion_id;
+        let query = `SELECT h.*, COALESCE(h.registrado_nombre, u.nombre, 'Sistema') AS registrador
+                     FROM historial_restock_b2b h
+                     LEFT JOIN usuarios_b2b u ON h.registrado_por = u.id
+                     WHERE h.institucion_id=$1`;
+        const params = [iid];
+        if (catalogo_id) { query += ` AND h.catalogo_id=$${params.length + 1}`; params.push(catalogo_id); }
+        if (paciente_id) { query += ` AND h.paciente_id=$${params.length + 1}`; params.push(paciente_id); }
+        query += ' ORDER BY h.created_at DESC LIMIT 50';
+        res.json((await pool.query(query, params)).rows);
+    } catch (err) {
+        console.error('GET /api/b2b/catalogo/restock-historial:', err.message);
+        res.status(500).json({ error: 'Error al obtener historial de restock' });
     }
 });
 
@@ -3260,11 +4246,15 @@ app.delete('/api/b2b/catalogo/:id', authB2BMiddleware, requireB2BRole('admin_ins
 app.get('/api/b2b/citas', authB2BMiddleware, async (req, res) => {
     try {
         const { paciente_id } = req.query;
+        if (req.b2bUser.rol === 'familiar' && !(await checkB2BFamiliarCanSee(req.b2bUser, 'citas')))
+            return res.status(403).json({ error: 'Acceso restringido por la institución' });
+        if (paciente_id && !(await checkB2BPacienteAccess(req.b2bUser, parseInt(paciente_id))))
+            return res.status(403).json({ error: 'Sin acceso a este paciente' });
         let query = `SELECT c.*, p.nombre as paciente_nombre, p.apellido as paciente_apellido
                      FROM citas_b2b c JOIN pacientes_b2b p ON c.paciente_id=p.id WHERE c.institucion_id=$1`;
         const params = [req.b2bUser.institucion_id];
         if (paciente_id) { query += ` AND c.paciente_id=$2`; params.push(paciente_id); }
-        query += ' ORDER BY c.fecha';
+        query += ' ORDER BY c.fecha LIMIT 200';
         res.json((await pool.query(query, params)).rows);
     } catch (err) {
         console.error('GET /api/b2b/citas:', err.message);
@@ -3273,10 +4263,11 @@ app.get('/api/b2b/citas', authB2BMiddleware, async (req, res) => {
 });
 
 // POST /api/b2b/citas
-app.post('/api/b2b/citas', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff'), async (req, res) => {
+app.post('/api/b2b/citas', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff','medico'), requireActivePlan, async (req, res) => {
     try {
         const { paciente_id, titulo, descripcion, fecha, medico, especialidad, lugar } = req.body;
         if (!paciente_id || !titulo || !fecha) return res.status(400).json({ error: 'paciente_id, titulo y fecha obligatorios' });
+        if (!(await checkB2BPacienteAccess(req.b2bUser, paciente_id))) return res.status(403).json({ error: 'Sin acceso a este paciente' });
         const result = await pool.query(
             `INSERT INTO citas_b2b (institucion_id, paciente_id, titulo, descripcion, fecha, medico, especialidad, lugar, created_by)
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
@@ -3290,12 +4281,13 @@ app.post('/api/b2b/citas', authB2BMiddleware, requireB2BRole('admin_institucion'
 });
 
 // PATCH /api/b2b/citas/:id
-app.patch('/api/b2b/citas/:id', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff'), async (req, res) => {
+app.patch('/api/b2b/citas/:id', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff','medico'), async (req, res) => {
     try {
         const { titulo, descripcion, fecha, medico, especialidad, lugar, estado } = req.body;
         await pool.query(
             `UPDATE citas_b2b SET titulo=COALESCE($1,titulo), descripcion=COALESCE($2,descripcion), fecha=COALESCE($3,fecha),
-             medico=COALESCE($4,medico), especialidad=COALESCE($5,especialidad), lugar=COALESCE($6,lugar), estado=COALESCE($7,estado)
+             medico=COALESCE($4,medico), especialidad=COALESCE($5,especialidad), lugar=COALESCE($6,lugar),
+             estado=COALESCE($7,estado), updated_at=NOW()
              WHERE id=$8 AND institucion_id=$9`,
             [titulo, descripcion, fecha, medico, especialidad, lugar, estado, req.params.id, req.b2bUser.institucion_id]
         );
@@ -3306,8 +4298,34 @@ app.patch('/api/b2b/citas/:id', authB2BMiddleware, requireB2BRole('admin_institu
     }
 });
 
+// GET /api/b2b/citas/historial?paciente_id=X  — citas marcadas como realizadas
+app.get('/api/b2b/citas/historial', authB2BMiddleware, async (req, res) => {
+    try {
+        const { paciente_id } = req.query;
+        if (req.b2bUser.rol === 'familiar' && !(await checkB2BFamiliarCanSee(req.b2bUser, 'citas')))
+            return res.status(403).json({ error: 'Acceso restringido por la institución' });
+        if (paciente_id && !(await checkB2BPacienteAccess(req.b2bUser, parseInt(paciente_id))))
+            return res.status(403).json({ error: 'Sin acceso a este paciente' });
+        const iid = req.b2bUser.institucion_id;
+        const params = [iid];
+        let pacienteFilter = '';
+        if (paciente_id) { params.push(paciente_id); pacienteFilter = `AND c.paciente_id=$${params.length}`; }
+        const query = `
+            SELECT c.id, c.titulo, c.descripcion, c.fecha, c.medico, c.especialidad, c.lugar, c.estado,
+                   c.updated_at, c.paciente_id
+            FROM citas_b2b c
+            WHERE c.institucion_id=$1 AND c.estado='realizada' ${pacienteFilter}
+            ORDER BY c.fecha DESC
+        `;
+        res.json((await pool.query(query, params)).rows);
+    } catch (err) {
+        console.error('GET /api/b2b/citas/historial:', err.message);
+        res.status(500).json({ error: 'Error al obtener historial de citas' });
+    }
+});
+
 // DELETE /api/b2b/citas/:id
-app.delete('/api/b2b/citas/:id', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff'), async (req, res) => {
+app.delete('/api/b2b/citas/:id', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff','medico'), async (req, res) => {
     try {
         await pool.query('DELETE FROM citas_b2b WHERE id=$1 AND institucion_id=$2', [req.params.id, req.b2bUser.institucion_id]);
         res.json({ success: true });
@@ -3323,6 +4341,10 @@ app.delete('/api/b2b/citas/:id', authB2BMiddleware, requireB2BRole('admin_instit
 app.get('/api/b2b/tareas/historial', authB2BMiddleware, async (req, res) => {
     try {
         const { paciente_id } = req.query;
+        if (req.b2bUser.rol === 'familiar' && !(await checkB2BFamiliarCanSee(req.b2bUser, 'tareas')))
+            return res.status(403).json({ error: 'Acceso restringido por la institución' });
+        if (paciente_id && !(await checkB2BPacienteAccess(req.b2bUser, parseInt(paciente_id))))
+            return res.status(403).json({ error: 'Sin acceso a este paciente' });
         let query = 'SELECT * FROM historial_tareas_b2b WHERE institucion_id=$1';
         const params = [req.b2bUser.institucion_id];
         if (paciente_id) { query += ` AND paciente_id=$2`; params.push(paciente_id); }
@@ -3338,6 +4360,10 @@ app.get('/api/b2b/tareas/historial', authB2BMiddleware, async (req, res) => {
 app.get('/api/b2b/tareas', authB2BMiddleware, async (req, res) => {
     try {
         const { paciente_id } = req.query;
+        if (req.b2bUser.rol === 'familiar' && !(await checkB2BFamiliarCanSee(req.b2bUser, 'tareas')))
+            return res.status(403).json({ error: 'Acceso restringido por la institución' });
+        if (paciente_id && !(await checkB2BPacienteAccess(req.b2bUser, parseInt(paciente_id))))
+            return res.status(403).json({ error: 'Sin acceso a este paciente' });
         let query = `SELECT t.*, p.nombre as paciente_nombre, p.apellido as paciente_apellido
                      FROM tareas_b2b t JOIN pacientes_b2b p ON t.paciente_id=p.id
                      WHERE t.institucion_id=$1 AND t.activa=TRUE`;
@@ -3352,10 +4378,11 @@ app.get('/api/b2b/tareas', authB2BMiddleware, async (req, res) => {
 });
 
 // POST /api/b2b/tareas
-app.post('/api/b2b/tareas', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff'), async (req, res) => {
+app.post('/api/b2b/tareas', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff','medico'), requireActivePlan, async (req, res) => {
     try {
         const { paciente_id, titulo, descripcion, categoria, frecuencia, hora } = req.body;
         if (!paciente_id || !titulo) return res.status(400).json({ error: 'paciente_id y titulo obligatorios' });
+        if (!(await checkB2BPacienteAccess(req.b2bUser, paciente_id))) return res.status(403).json({ error: 'Sin acceso a este paciente' });
         const result = await pool.query(
             `INSERT INTO tareas_b2b (institucion_id, paciente_id, titulo, descripcion, categoria, frecuencia, hora, created_by)
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
@@ -3369,16 +4396,19 @@ app.post('/api/b2b/tareas', authB2BMiddleware, requireB2BRole('admin_institucion
 });
 
 // POST /api/b2b/tareas/:id/completar
-app.post('/api/b2b/tareas/:id/completar', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff'), async (req, res) => {
+app.post('/api/b2b/tareas/:id/completar', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff','medico'), requireActivePlan, async (req, res) => {
     try {
         const tarea = await pool.query('SELECT * FROM tareas_b2b WHERE id=$1 AND institucion_id=$2', [req.params.id, req.b2bUser.institucion_id]);
         if (tarea.rowCount === 0) return res.status(404).json({ error: 'Tarea no encontrada' });
         const t = tarea.rows[0];
+        if (!(await checkB2BPacienteAccess(req.b2bUser, t.paciente_id))) return res.status(403).json({ error: 'Sin acceso a este paciente' });
         const _compNombre = (req.body._quien && typeof req.body._quien === 'string' && req.body._quien.trim()) ? req.body._quien.trim() : req.b2bUser.nombre;
+        // Use the client-side timestamp when the action was performed offline; fall back to server NOW().
+        const _fechaTarea = utcIsoToArgentinaNaive(req.body._offline_ts);
         const result = await pool.query(
-            `INSERT INTO historial_tareas_b2b (institucion_id, paciente_id, tarea_id, tarea_titulo, completado_por, completador_nombre, notas)
-             VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-            [req.b2bUser.institucion_id, t.paciente_id, t.id, t.titulo, req.b2bUser.id, _compNombre, req.body.notas||null]
+            `INSERT INTO historial_tareas_b2b (institucion_id, paciente_id, tarea_id, tarea_titulo, completado_por, completador_nombre, notas, fecha)
+             VALUES ($1,$2,$3,$4,$5,$6,$7, COALESCE($8, NOW() AT TIME ZONE 'America/Argentina/Buenos_Aires')) RETURNING *`,
+            [req.b2bUser.institucion_id, t.paciente_id, t.id, t.titulo, req.b2bUser.id, _compNombre, req.body.notas||null, _fechaTarea]
         );
         res.status(201).json(result.rows[0]);
     } catch (err) {
@@ -3388,7 +4418,7 @@ app.post('/api/b2b/tareas/:id/completar', authB2BMiddleware, requireB2BRole('adm
 });
 
 // PATCH /api/b2b/tareas/:id
-app.patch('/api/b2b/tareas/:id', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff'), async (req, res) => {
+app.patch('/api/b2b/tareas/:id', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff','medico'), async (req, res) => {
     try {
         const { titulo, descripcion, categoria, frecuencia, hora, activa } = req.body;
         await pool.query(
@@ -3405,7 +4435,7 @@ app.patch('/api/b2b/tareas/:id', authB2BMiddleware, requireB2BRole('admin_instit
 });
 
 // DELETE /api/b2b/tareas/:id
-app.delete('/api/b2b/tareas/:id', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff'), async (req, res) => {
+app.delete('/api/b2b/tareas/:id', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff','medico'), async (req, res) => {
     try {
         await pool.query('UPDATE tareas_b2b SET activa=FALSE WHERE id=$1 AND institucion_id=$2', [req.params.id, req.b2bUser.institucion_id]);
         res.json({ success: true });
@@ -3421,6 +4451,10 @@ app.delete('/api/b2b/tareas/:id', authB2BMiddleware, requireB2BRole('admin_insti
 app.get('/api/b2b/sintomas', authB2BMiddleware, async (req, res) => {
     try {
         const { paciente_id } = req.query;
+        if (req.b2bUser.rol === 'familiar' && !(await checkB2BFamiliarCanSee(req.b2bUser, 'sintomas')))
+            return res.status(403).json({ error: 'Acceso restringido por la institución' });
+        if (paciente_id && !(await checkB2BPacienteAccess(req.b2bUser, parseInt(paciente_id))))
+            return res.status(403).json({ error: 'Sin acceso a este paciente' });
         let query = `SELECT s.*, p.nombre as paciente_nombre, p.apellido as paciente_apellido
                      FROM sintomas_b2b s JOIN pacientes_b2b p ON s.paciente_id=p.id WHERE s.institucion_id=$1`;
         const params = [req.b2bUser.institucion_id];
@@ -3434,15 +4468,17 @@ app.get('/api/b2b/sintomas', authB2BMiddleware, async (req, res) => {
 });
 
 // POST /api/b2b/sintomas
-app.post('/api/b2b/sintomas', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff'), async (req, res) => {
+app.post('/api/b2b/sintomas', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff','medico'), requireActivePlan, async (req, res) => {
     try {
         const { paciente_id, descripcion, intensidad } = req.body;
         if (!paciente_id || !descripcion) return res.status(400).json({ error: 'paciente_id y descripcion obligatorios' });
+        if (!(await checkB2BPacienteAccess(req.b2bUser, paciente_id))) return res.status(403).json({ error: 'Sin acceso a este paciente' });
         const _regNombreSint = (req.body._quien && typeof req.body._quien === 'string' && req.body._quien.trim()) ? req.body._quien.trim() : req.b2bUser.nombre;
+        const _fechaSint = utcIsoToArgentinaNaive(req.body._offline_ts);
         const result = await pool.query(
-            `INSERT INTO sintomas_b2b (institucion_id, paciente_id, descripcion, intensidad, registrado_por, registrador_nombre)
-             VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-            [req.b2bUser.institucion_id, paciente_id, descripcion, intensidad||null, req.b2bUser.id, _regNombreSint]
+            `INSERT INTO sintomas_b2b (institucion_id, paciente_id, descripcion, intensidad, registrado_por, registrador_nombre, fecha)
+             VALUES ($1,$2,$3,$4,$5,$6, COALESCE($7, NOW() AT TIME ZONE 'America/Argentina/Buenos_Aires')) RETURNING *`,
+            [req.b2bUser.institucion_id, paciente_id, descripcion, intensidad||null, req.b2bUser.id, _regNombreSint, _fechaSint]
         );
         res.status(201).json(result.rows[0]);
     } catch (err) {
@@ -3452,7 +4488,7 @@ app.post('/api/b2b/sintomas', authB2BMiddleware, requireB2BRole('admin_instituci
 });
 
 // PATCH /api/b2b/sintomas/:id
-app.patch('/api/b2b/sintomas/:id', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff'), async (req, res) => {
+app.patch('/api/b2b/sintomas/:id', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff','medico'), async (req, res) => {
     try {
         const { descripcion, intensidad } = req.body;
         if (!descripcion) return res.status(400).json({ error: 'descripcion obligatoria' });
@@ -3469,7 +4505,7 @@ app.patch('/api/b2b/sintomas/:id', authB2BMiddleware, requireB2BRole('admin_inst
 });
 
 // DELETE /api/b2b/sintomas/:id
-app.delete('/api/b2b/sintomas/:id', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff'), async (req, res) => {
+app.delete('/api/b2b/sintomas/:id', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff','medico'), async (req, res) => {
     try {
         await pool.query('DELETE FROM sintomas_b2b WHERE id=$1 AND institucion_id=$2', [req.params.id, req.b2bUser.institucion_id]);
         res.json({ success: true });
@@ -3485,6 +4521,10 @@ app.delete('/api/b2b/sintomas/:id', authB2BMiddleware, requireB2BRole('admin_ins
 app.get('/api/b2b/signos-vitales', authB2BMiddleware, async (req, res) => {
     try {
         const { paciente_id, tipo } = req.query;
+        if (req.b2bUser.rol === 'familiar' && !(await checkB2BFamiliarCanSee(req.b2bUser, 'signos')))
+            return res.status(403).json({ error: 'Acceso restringido por la institución' });
+        if (paciente_id && !(await checkB2BPacienteAccess(req.b2bUser, parseInt(paciente_id))))
+            return res.status(403).json({ error: 'Sin acceso a este paciente' });
         let query = `SELECT sv.*, p.nombre as paciente_nombre, p.apellido as paciente_apellido
                      FROM signos_vitales_b2b sv JOIN pacientes_b2b p ON sv.paciente_id=p.id WHERE sv.institucion_id=$1`;
         const params = [req.b2bUser.institucion_id];
@@ -3499,15 +4539,17 @@ app.get('/api/b2b/signos-vitales', authB2BMiddleware, async (req, res) => {
 });
 
 // POST /api/b2b/signos-vitales
-app.post('/api/b2b/signos-vitales', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff'), async (req, res) => {
+app.post('/api/b2b/signos-vitales', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff','medico'), requireActivePlan, async (req, res) => {
     try {
         const { paciente_id, tipo, valor, unidad, notas } = req.body;
         if (!paciente_id || !tipo || !valor) return res.status(400).json({ error: 'paciente_id, tipo y valor obligatorios' });
+        if (!(await checkB2BPacienteAccess(req.b2bUser, paciente_id))) return res.status(403).json({ error: 'Sin acceso a este paciente' });
         const _regNombreSigno = (req.body._quien && typeof req.body._quien === 'string' && req.body._quien.trim()) ? req.body._quien.trim() : req.b2bUser.nombre;
+        const _fechaSigno = utcIsoToArgentinaNaive(req.body._offline_ts);
         const result = await pool.query(
-            `INSERT INTO signos_vitales_b2b (institucion_id, paciente_id, tipo, valor, unidad, notas, registrado_por, registrador_nombre)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-            [req.b2bUser.institucion_id, paciente_id, tipo, valor, unidad, notas, req.b2bUser.id, _regNombreSigno]
+            `INSERT INTO signos_vitales_b2b (institucion_id, paciente_id, tipo, valor, unidad, notas, registrado_por, registrador_nombre, fecha)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8, COALESCE($9, NOW() AT TIME ZONE 'America/Argentina/Buenos_Aires')) RETURNING *`,
+            [req.b2bUser.institucion_id, paciente_id, tipo, valor, unidad, notas, req.b2bUser.id, _regNombreSigno, _fechaSigno]
         );
         res.status(201).json(result.rows[0]);
     } catch (err) {
@@ -3517,7 +4559,7 @@ app.post('/api/b2b/signos-vitales', authB2BMiddleware, requireB2BRole('admin_ins
 });
 
 // DELETE /api/b2b/signos-vitales/:id
-app.delete('/api/b2b/signos-vitales/:id', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff'), async (req, res) => {
+app.delete('/api/b2b/signos-vitales/:id', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff','medico'), async (req, res) => {
     try {
         await pool.query('DELETE FROM signos_vitales_b2b WHERE id=$1 AND institucion_id=$2', [req.params.id, req.b2bUser.institucion_id]);
         res.json({ success: true });
@@ -3533,6 +4575,10 @@ app.delete('/api/b2b/signos-vitales/:id', authB2BMiddleware, requireB2BRole('adm
 app.get('/api/b2b/contactos', authB2BMiddleware, async (req, res) => {
     try {
         const { paciente_id } = req.query;
+        if (req.b2bUser.rol === 'familiar' && !(await checkB2BFamiliarCanSee(req.b2bUser, 'contactos')))
+            return res.status(403).json({ error: 'Acceso restringido por la institución' });
+        if (paciente_id && !(await checkB2BPacienteAccess(req.b2bUser, parseInt(paciente_id))))
+            return res.status(403).json({ error: 'Sin acceso a este paciente' });
         let query = 'SELECT * FROM contactos_b2b WHERE institucion_id=$1';
         const params = [req.b2bUser.institucion_id];
         if (paciente_id) { query += ` AND paciente_id=$2`; params.push(paciente_id); }
@@ -3545,10 +4591,11 @@ app.get('/api/b2b/contactos', authB2BMiddleware, async (req, res) => {
 });
 
 // POST /api/b2b/contactos
-app.post('/api/b2b/contactos', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff'), async (req, res) => {
+app.post('/api/b2b/contactos', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff','medico'), async (req, res) => {
     try {
         const { paciente_id, nombre, relacion, telefono, email, es_principal } = req.body;
         if (!paciente_id || !nombre) return res.status(400).json({ error: 'paciente_id y nombre obligatorios' });
+        if (!(await checkB2BPacienteAccess(req.b2bUser, paciente_id))) return res.status(403).json({ error: 'Sin acceso a este paciente' });
         const result = await pool.query(
             `INSERT INTO contactos_b2b (institucion_id, paciente_id, nombre, relacion, telefono, email, es_principal)
              VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
@@ -3562,7 +4609,7 @@ app.post('/api/b2b/contactos', authB2BMiddleware, requireB2BRole('admin_instituc
 });
 
 // PATCH /api/b2b/contactos/:id
-app.patch('/api/b2b/contactos/:id', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff'), async (req, res) => {
+app.patch('/api/b2b/contactos/:id', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff','medico'), async (req, res) => {
     try {
         const { nombre, relacion, telefono, email, es_principal } = req.body;
         await pool.query(
@@ -3579,7 +4626,7 @@ app.patch('/api/b2b/contactos/:id', authB2BMiddleware, requireB2BRole('admin_ins
 });
 
 // DELETE /api/b2b/contactos/:id
-app.delete('/api/b2b/contactos/:id', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff'), async (req, res) => {
+app.delete('/api/b2b/contactos/:id', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff','medico'), async (req, res) => {
     try {
         await pool.query('DELETE FROM contactos_b2b WHERE id=$1 AND institucion_id=$2', [req.params.id, req.b2bUser.institucion_id]);
         res.json({ success: true });
@@ -3595,11 +4642,15 @@ app.delete('/api/b2b/contactos/:id', authB2BMiddleware, requireB2BRole('admin_in
 app.get('/api/b2b/notas', authB2BMiddleware, async (req, res) => {
     try {
         const { paciente_id } = req.query;
+        if (req.b2bUser.rol === 'familiar' && !(await checkB2BFamiliarCanSee(req.b2bUser, 'notas')))
+            return res.status(403).json({ error: 'Acceso restringido por la institución' });
+        if (paciente_id && !(await checkB2BPacienteAccess(req.b2bUser, parseInt(paciente_id))))
+            return res.status(403).json({ error: 'Sin acceso a este paciente' });
         let query = `SELECT n.*, p.nombre as paciente_nombre, p.apellido as paciente_apellido
                      FROM notas_b2b n JOIN pacientes_b2b p ON n.paciente_id=p.id WHERE n.institucion_id=$1`;
         const params = [req.b2bUser.institucion_id];
         if (paciente_id) { query += ` AND n.paciente_id=$2`; params.push(paciente_id); }
-        query += ' ORDER BY n.urgente DESC, n.created_at DESC';
+        query += ' ORDER BY n.urgente DESC, n.created_at DESC LIMIT 200';
         res.json((await pool.query(query, params)).rows);
     } catch (err) {
         console.error('GET /api/b2b/notas:', err.message);
@@ -3608,10 +4659,11 @@ app.get('/api/b2b/notas', authB2BMiddleware, async (req, res) => {
 });
 
 // POST /api/b2b/notas
-app.post('/api/b2b/notas', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff'), async (req, res) => {
+app.post('/api/b2b/notas', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff','medico'), requireActivePlan, async (req, res) => {
     try {
         const { paciente_id, titulo, contenido, urgente } = req.body;
         if (!paciente_id) return res.status(400).json({ error: 'paciente_id obligatorio' });
+        if (!(await checkB2BPacienteAccess(req.b2bUser, paciente_id))) return res.status(403).json({ error: 'Sin acceso a este paciente' });
         const _autorNombre = (req.body._quien && typeof req.body._quien === 'string' && req.body._quien.trim()) ? req.body._quien.trim() : req.b2bUser.nombre;
         const result = await pool.query(
             `INSERT INTO notas_b2b (institucion_id, paciente_id, titulo, contenido, urgente, autor_id, autor_nombre)
@@ -3626,7 +4678,7 @@ app.post('/api/b2b/notas', authB2BMiddleware, requireB2BRole('admin_institucion'
 });
 
 // PATCH /api/b2b/notas/:id
-app.patch('/api/b2b/notas/:id', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff'), async (req, res) => {
+app.patch('/api/b2b/notas/:id', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff','medico'), async (req, res) => {
     try {
         const { titulo, contenido, urgente } = req.body;
         await pool.query(
@@ -3642,7 +4694,7 @@ app.patch('/api/b2b/notas/:id', authB2BMiddleware, requireB2BRole('admin_institu
 });
 
 // DELETE /api/b2b/notas/:id
-app.delete('/api/b2b/notas/:id', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff'), async (req, res) => {
+app.delete('/api/b2b/notas/:id', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff','medico'), async (req, res) => {
     try {
         await pool.query('DELETE FROM notas_b2b WHERE id=$1 AND institucion_id=$2', [req.params.id, req.b2bUser.institucion_id]);
         res.json({ success: true });
@@ -3652,43 +4704,216 @@ app.delete('/api/b2b/notas/:id', authB2BMiddleware, requireB2BRole('admin_instit
     }
 });
 
+// ---------- B2B: NOTIFICACIONES ----------
+
+// GET /api/b2b/notificaciones — devuelve alertas agrupadas + conteo de no vistas
+app.get('/api/b2b/notificaciones', authB2BMiddleware, async (req, res) => {
+    try {
+        const iid = req.b2bUser.institucion_id;
+        const uid = req.b2bUser.id;
+        // Obtener cuándo abrió la campana por última vez este usuario
+        const lsRes = await pool.query('SELECT notif_last_seen_at FROM usuarios_b2b WHERE id=$1', [uid]);
+        const lastSeen = lsRes.rows[0]?.notif_last_seen_at || new Date(0);
+
+        // Familiares solo ven notificaciones de sus pacientes asignados
+        let familiarPatientIds = new Set();
+        if (req.b2bUser.rol === 'familiar') {
+            const assignedR = await pool.query(
+                'SELECT paciente_id FROM asignaciones_b2b WHERE cuidador_id=$1 AND activa=TRUE',
+                [uid]
+            );
+            if (assignedR.rows.length === 0) return res.json({ unread: 0, items: [] });
+            assignedR.rows.forEach(r => familiarPatientIds.add(r.paciente_id));
+        }
+        // Helpers de filtro: _fp filtra por paciente_id, _fpById filtra por id (cuando la row es el paciente)
+        const _fp    = (rows) => familiarPatientIds.size === 0 ? rows : rows.filter(r => familiarPatientIds.has(r.paciente_id));
+        const _fpById = (rows) => familiarPatientIds.size === 0 ? rows : rows.filter(r => familiarPatientIds.has(r.id));
+        const _fpStock = (rows) => familiarPatientIds.size === 0 ? rows : rows.filter(r => r.paciente_id !== null && familiarPatientIds.has(r.paciente_id));
+
+        const [citasR, notasR, sintomasR, stockR, cumpleR, ingresosR, egresosR] = await Promise.all([
+            // Citas próximas (15 días) pendientes
+            pool.query(`SELECT c.id, c.titulo, c.fecha, c.created_at, p.nombre||' '||p.apellido AS paciente_nombre, p.id AS paciente_id
+                        FROM citas_b2b c JOIN pacientes_b2b p ON c.paciente_id=p.id
+                        WHERE c.institucion_id=$1 AND c.estado='pendiente' AND c.fecha BETWEEN NOW() AND NOW()+INTERVAL '15 days'
+                        AND p.fecha_egreso IS NULL ORDER BY c.fecha LIMIT 20`, [iid]).catch(() => ({ rows: [] })),
+            // Notas urgentes activas (no archivadas — usa solo columnas existentes)
+            pool.query(`SELECT n.id, n.contenido, n.created_at, p.nombre||' '||p.apellido AS paciente_nombre, p.id AS paciente_id
+                        FROM notas_b2b n JOIN pacientes_b2b p ON n.paciente_id=p.id
+                        WHERE n.institucion_id=$1 AND n.urgente=TRUE
+                        AND p.fecha_egreso IS NULL ORDER BY n.created_at DESC LIMIT 10`, [iid]).catch(() => ({ rows: [] })),
+            // Síntomas registrados en las últimas 24h
+            pool.query(`SELECT s.id, s.descripcion, s.intensidad, s.fecha, p.nombre||' '||p.apellido AS paciente_nombre, p.id AS paciente_id
+                        FROM sintomas_b2b s JOIN pacientes_b2b p ON s.paciente_id=p.id
+                        WHERE s.institucion_id=$1 AND s.fecha > NOW()-INTERVAL '24 hours'
+                        AND p.fecha_egreso IS NULL ORDER BY s.fecha DESC LIMIT 10`, [iid]).catch(() => ({ rows: [] })),
+            // Insumos con stock bajo
+            pool.query(`SELECT id, nombre, stock_actual, stock_minimo, paciente_id, updated_at
+                        FROM catalogo_medicamentos_b2b
+                        WHERE institucion_id=$1 AND activo=TRUE AND stock_actual < stock_minimo
+                        ORDER BY (stock_minimo - stock_actual) DESC LIMIT 20`, [iid]).catch(() => ({ rows: [] })),
+            // Cumpleaños en los próximos 7 días (robusto para cambio de año)
+            pool.query(`SELECT id, nombre, apellido,
+                          TO_CHAR(fecha_nacimiento::date, 'YYYY-MM-DD') AS fn_iso,
+                          (EXTRACT(MONTH FROM fecha_nacimiento::date) = EXTRACT(MONTH FROM NOW())
+                           AND EXTRACT(DAY FROM fecha_nacimiento::date) = EXTRACT(DAY FROM NOW())) AS es_hoy
+                        FROM pacientes_b2b
+                        WHERE institucion_id=$1 AND activo=TRUE AND fecha_egreso IS NULL AND fecha_nacimiento IS NOT NULL
+                        AND (
+                          MAKE_DATE(EXTRACT(YEAR FROM NOW())::int, EXTRACT(MONTH FROM fecha_nacimiento::date)::int, EXTRACT(DAY FROM fecha_nacimiento::date)::int)
+                            BETWEEN NOW()::date AND (NOW()::date + INTERVAL '7 days')::date
+                          OR
+                          MAKE_DATE((EXTRACT(YEAR FROM NOW())+1)::int, EXTRACT(MONTH FROM fecha_nacimiento::date)::int, EXTRACT(DAY FROM fecha_nacimiento::date)::int)
+                            BETWEEN NOW()::date AND (NOW()::date + INTERVAL '7 days')::date
+                        )
+                        ORDER BY EXTRACT(MONTH FROM fecha_nacimiento::date), EXTRACT(DAY FROM fecha_nacimiento::date) LIMIT 10`, [iid]).catch(() => ({ rows: [] })),
+            // Ingresos recientes (últimas 24h)
+            pool.query(`SELECT id, nombre, apellido, created_at FROM pacientes_b2b
+                        WHERE institucion_id=$1 AND created_at > NOW()-INTERVAL '24 hours'
+                        ORDER BY created_at DESC LIMIT 10`, [iid]).catch(() => ({ rows: [] })),
+            // Egresos recientes (últimas 24h)
+            pool.query(`SELECT id, nombre, apellido, fecha_egreso FROM pacientes_b2b
+                        WHERE institucion_id=$1 AND fecha_egreso IS NOT NULL
+                        AND fecha_egreso::timestamptz > NOW()-INTERVAL '24 hours'
+                        ORDER BY fecha_egreso DESC LIMIT 10`, [iid]).catch(() => ({ rows: [] })),
+        ]);
+
+
+        // Fecha de hoy en Argentina â€” para comparar cumpleaÃ±os con lastSeen
+
+        const todayAR = new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' }).format(new Date());
+
+        const lastSeenDateStr = (lastSeen && !(lastSeen instanceof Date && lastSeen.getTime() === 0)) ? String(lastSeen).slice(0, 10) : '1970-01-01';
+
+        // M12: para familiar, respetar permisos de sección en las notificaciones
+        const [familiarCanSeeNotas, familiarCanSeeCitas, familiarCanSeeSintomas] = req.b2bUser.rol === 'familiar'
+            ? await Promise.all([checkB2BFamiliarCanSee(req.b2bUser, 'notas'), checkB2BFamiliarCanSee(req.b2bUser, 'citas'), checkB2BFamiliarCanSee(req.b2bUser, 'sintomas')])
+            : [true, true, true];
+
+        const items = [];
+
+        familiarCanSeeCitas && citasR.rows.length && _fp(citasR.rows).forEach(c => items.push({ tipo: 'cita', icono: '\uD83D\uDCC5', titulo: c.titulo, descripcion: `${c.paciente_nombre} \u00B7 ${new Date(c.fecha).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })}`, href: `paciente.html?id=${c.paciente_id}`, ts: c.created_at, es_nuevo: new Date(c.created_at) > new Date(lastSeen) }));
+
+        familiarCanSeeNotas && notasR.rows.length && _fp(notasR.rows).forEach(n => items.push({ tipo: 'nota_urgente', icono: '\uD83D\uDEA8', titulo: 'Nota urgente', descripcion: `${n.paciente_nombre}: ${String(n.contenido || '').slice(0, 70)}`, href: `paciente.html?id=${n.paciente_id}`, ts: n.created_at, es_nuevo: new Date(n.created_at) > new Date(lastSeen) }));
+
+        familiarCanSeeSintomas && sintomasR.rows.length && _fp(sintomasR.rows).forEach(s => items.push({ tipo: 'sintoma', icono: '\uD83E\uDE7A', titulo: 'S\u00EDntoma registrado', descripcion: `${s.paciente_nombre}: ${s.descripcion}${s.intensidad ? ' \u00B7 Intensidad: '+s.intensidad+'/10' : ''}`, href: `paciente.html?id=${s.paciente_id}`, ts: s.fecha, es_nuevo: new Date(s.fecha) > new Date(lastSeen) }));
+
+        stockR.rows.length && _fpStock(stockR.rows).forEach(s => items.push({ tipo: 'stock_bajo', icono: '\u26A0\uFE0F', titulo: `Stock bajo: ${s.nombre}`, descripcion: `Actual: ${s.stock_actual} / M\u00EDnimo: ${s.stock_minimo}`, href: s.paciente_id ? `paciente.html?id=${s.paciente_id}` : 'catalogo.html', ts: s.updated_at, es_nuevo: !!s.updated_at && new Date(s.updated_at) > new Date(lastSeen) }));
+
+        cumpleR.rows.length && _fpById(cumpleR.rows).forEach(p => { const desc = p.fn_iso ? new Date(p.fn_iso + 'T12:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: 'long' }) : '\u2014'; const bts = p.es_hoy ? todayAR + 'T00:00:00' : null; items.push({ tipo: 'cumpleanos', icono: '\uD83C\uDF82', titulo: `Cumplea\u00F1os: ${p.nombre} ${p.apellido}`, descripcion: desc, href: `paciente.html?id=${p.id}`, ts: bts, es_nuevo: !!p.es_hoy && lastSeenDateStr < todayAR }); });
+
+        ingresosR.rows.length && _fpById(ingresosR.rows).forEach(p => items.push({ tipo: 'ingreso', icono: '\uD83C\uDFE5', titulo: `Nuevo ingreso: ${p.nombre} ${p.apellido}`, descripcion: 'Residente dado de alta recientemente', href: `paciente.html?id=${p.id}`, ts: p.created_at, es_nuevo: new Date(p.created_at) > new Date(lastSeen) }));
+
+        egresosR.rows.length && _fpById(egresosR.rows).forEach(p => items.push({ tipo: 'egreso', icono: '\uD83C\uDFE0', titulo: `Egreso: ${p.nombre} ${p.apellido}`, descripcion: 'Residente dado de egreso recientemente', href: `paciente.html?id=${p.id}`, ts: p.fecha_egreso, es_nuevo: p.fecha_egreso && new Date(p.fecha_egreso) > new Date(lastSeen) }));
+
+        // Ordenar por momento de generación (ts) descendente — más reciente primero
+        items.sort((a, b) => {
+            if (!a.ts && !b.ts) return 0;
+            if (!a.ts) return 1;
+            if (!b.ts) return -1;
+            return new Date(b.ts) - new Date(a.ts);
+        });
+        res.json({ unread: items.filter(i => i.es_nuevo).length, items });
+    } catch (err) {
+        console.error('GET /api/b2b/notificaciones:', err.message);
+        res.status(500).json({ error: 'Error al obtener notificaciones' });
+    }
+});
+
+// POST /api/b2b/notificaciones/vistas — marca la campana como vista (actualiza timestamp)
+app.post('/api/b2b/notificaciones/vistas', authB2BMiddleware, async (req, res) => {
+    try {
+        await pool.query('UPDATE usuarios_b2b SET notif_last_seen_at=NOW() WHERE id=$1', [req.b2bUser.id]);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('POST /api/b2b/notificaciones/vistas:', err.message);
+        res.status(500).json({ error: 'Error al marcar notificaciones como vistas' });
+    }
+});
+
 // ---------- B2B: DASHBOARD ----------
 
 // GET /api/b2b/dashboard
 app.get('/api/b2b/dashboard', authB2BMiddleware, async (req, res) => {
     try {
         const iid = req.b2bUser.institucion_id;
+        const uid = req.b2bUser.id;
+
+        // Determinar si el usuario tiene acceso restringido (solo sus pacientes asignados)
+        let assignedIds = null; // null = acceso total a la institución
+        if (req.b2bUser.rol === 'familiar') {
+            const r = await pool.query('SELECT paciente_id FROM asignaciones_b2b WHERE cuidador_id=$1 AND activa=TRUE', [uid]);
+            assignedIds = r.rows.map(x => x.paciente_id);
+            if (assignedIds.length === 0) return res.json({ resumen: { pacientes_activos: 0, tomas_hoy: 0, tareas_completadas_hoy: 0, staff: [] }, citas_proximas: [], sintomas_recientes: [], notas_urgentes: [], cumpleanos_hoy: [], stock_bajo: [] });
+        } else if (req.b2bUser.rol === 'medico' || req.b2bUser.rol === 'cuidador_staff') {
+            const permKey = `${req.b2bUser.rol}_ver_todos_pacientes`;
+            let verTodos = true;
+            try {
+                const instRow = await pool.query('SELECT permisos_equipo FROM instituciones_b2b WHERE id=$1', [iid]);
+                const perms = instRow.rows[0]?.permisos_equipo || {};
+                if (permKey in perms) verTodos = !!perms[permKey];
+            } catch {}
+            if (!verTodos) {
+                const r = await pool.query('SELECT paciente_id FROM asignaciones_b2b WHERE cuidador_id=$1 AND activa=TRUE', [uid]);
+                assignedIds = r.rows.map(x => x.paciente_id);
+                if (assignedIds.length === 0) return res.json({ resumen: { pacientes_activos: 0, tomas_hoy: 0, tareas_completadas_hoy: 0, staff: [] }, citas_proximas: [], sintomas_recientes: [], notas_urgentes: [], cumpleanos_hoy: [], stock_bajo: [] });
+            }
+        }
+
+        // Fragmentos SQL condicionales según acceso
+        const pf   = assignedIds ? ' AND p.id = ANY($2)'        : ''; // join con pacientes_b2b alias p
+        const pidf = assignedIds ? ' AND id = ANY($2)'          : ''; // query directa a pacientes_b2b
+        const pdf  = assignedIds ? ' AND paciente_id = ANY($2)' : ''; // historial sin join
+        const bp   = assignedIds ? [iid, assignedIds] : [iid];
+
         const [pacientes, staff, citasProximas, sintomasRecientes, notasUrgentes, tomasHoy, tareasHoy, cumpleanosHoy, stockBajo] = await Promise.all([
-            pool.query('SELECT COUNT(*) as total FROM pacientes_b2b WHERE institucion_id=$1 AND activo=TRUE AND fecha_egreso IS NULL', [iid]),
+            pool.query(`SELECT COUNT(*) as total FROM pacientes_b2b WHERE institucion_id=$1 AND activo=TRUE AND fecha_egreso IS NULL${pidf}`, bp),
             pool.query('SELECT COUNT(*) as total, rol FROM usuarios_b2b WHERE institucion_id=$1 AND activo=TRUE GROUP BY rol', [iid]),
             pool.query(`SELECT c.*, p.nombre as paciente_nombre, p.apellido as paciente_apellido
                         FROM citas_b2b c JOIN pacientes_b2b p ON c.paciente_id=p.id
-                        WHERE c.institucion_id=$1 AND c.fecha BETWEEN NOW() AND NOW()+INTERVAL '7 days' AND c.estado='pendiente'
-                        AND p.fecha_egreso IS NULL
-                        ORDER BY c.fecha LIMIT 10`, [iid]),
+                        WHERE c.institucion_id=$1 AND c.fecha BETWEEN NOW() AND NOW()+INTERVAL '15 days' AND c.estado='pendiente'
+                        AND p.fecha_egreso IS NULL${pf}
+                        ORDER BY c.fecha LIMIT 10`, bp),
             pool.query(`SELECT s.*, p.nombre as paciente_nombre, p.apellido as paciente_apellido
                         FROM sintomas_b2b s JOIN pacientes_b2b p ON s.paciente_id=p.id
                         WHERE s.institucion_id=$1 AND s.fecha > NOW()-INTERVAL '24 hours'
-                        AND p.fecha_egreso IS NULL
-                        ORDER BY s.fecha DESC LIMIT 10`, [iid]),
+                        AND p.fecha_egreso IS NULL${pf}
+                        ORDER BY s.fecha DESC LIMIT 10`, bp),
             pool.query(`SELECT n.*, p.nombre as paciente_nombre, p.apellido as paciente_apellido
                         FROM notas_b2b n JOIN pacientes_b2b p ON n.paciente_id=p.id
                         WHERE n.institucion_id=$1 AND n.urgente=TRUE
-                        AND p.fecha_egreso IS NULL
-                        ORDER BY n.created_at DESC LIMIT 10`, [iid]),
-            pool.query('SELECT COUNT(*) as total FROM historial_medicamentos_b2b WHERE institucion_id=$1 AND fecha>CURRENT_DATE', [iid]),
-            pool.query('SELECT COUNT(*) as total FROM historial_tareas_b2b WHERE institucion_id=$1 AND fecha>CURRENT_DATE', [iid]),
+                        AND p.fecha_egreso IS NULL${pf}
+                        ORDER BY n.created_at DESC LIMIT 10`, bp),
+            pool.query(`SELECT COUNT(*) as total FROM historial_medicamentos_b2b WHERE institucion_id=$1 AND fecha>CURRENT_DATE${pdf}`, bp),
+            pool.query(`SELECT COUNT(*) as total FROM historial_tareas_b2b WHERE institucion_id=$1 AND fecha>CURRENT_DATE${pdf}`, bp),
             pool.query(`SELECT id, nombre, apellido, fecha_nacimiento,
                         EXTRACT(YEAR FROM AGE(fecha_nacimiento)) AS edad
                         FROM pacientes_b2b
                         WHERE institucion_id=$1 AND activo=TRUE AND fecha_egreso IS NULL
-                        AND TO_CHAR(fecha_nacimiento,'MM-DD') = TO_CHAR(NOW(),'MM-DD')`, [iid]),
-            pool.query(`SELECT id, nombre,
-                        TRIM(COALESCE(dosis,'') || CASE WHEN frecuencia IS NOT NULL AND frecuencia <> '' THEN ' · ' || frecuencia ELSE '' END) AS dosis_horario,
-                        stock
-                        FROM medicamentos_b2b
-                        WHERE institucion_id=$1 AND activo=TRUE AND stock IS NOT NULL AND stock < 5
-                        ORDER BY stock ASC LIMIT 10`, [iid])
+                        AND TO_CHAR(fecha_nacimiento,'MM-DD') = TO_CHAR(NOW(),'MM-DD')${pidf}`, bp),
+            req.b2bUser.rol === 'familiar' ? Promise.resolve({ rows: [] }) :
+            pool.query(`
+                SELECT * FROM (
+                    -- Insumos individuales con stock bajo (no vinculados a catálogo)
+                    SELECT m.id::INTEGER, m.nombre,
+                        TRIM(COALESCE(m.dosis,'') || CASE WHEN m.frecuencia IS NOT NULL AND m.frecuencia <> '' THEN ' · ' || m.frecuencia ELSE '' END) AS dosis_horario,
+                        m.stock, NULL::TEXT AS unidad, 'individual'::TEXT AS tipo,
+                        m.paciente_id, p.nombre AS paciente_nombre, p.apellido AS paciente_apellido
+                    FROM medicamentos_b2b m
+                    LEFT JOIN pacientes_b2b p ON m.paciente_id = p.id
+                    WHERE m.institucion_id=$1 AND m.activo=TRUE AND m.catalogo_id IS NULL
+                      AND m.stock IS NOT NULL AND m.stock < 10
+                    UNION ALL
+                    -- Insumos del catálogo (institucional y por paciente) con stock bajo
+                    SELECT c.id::INTEGER, c.nombre, c.presentacion AS dosis_horario,
+                        c.stock_actual AS stock, c.unidad,
+                        CASE WHEN c.paciente_id IS NULL THEN 'catalogo'::TEXT ELSE 'catalogo_paciente'::TEXT END AS tipo,
+                        c.paciente_id, p.nombre AS paciente_nombre, p.apellido AS paciente_apellido
+                    FROM catalogo_medicamentos_b2b c
+                    LEFT JOIN pacientes_b2b p ON c.paciente_id = p.id
+                    WHERE c.institucion_id=$1 AND c.stock_actual IS NOT NULL
+                      AND c.stock_actual <= COALESCE(c.stock_minimo, 5)
+                ) combinado
+                ORDER BY stock ASC LIMIT 15`, [iid])
         ]);
         res.json({
             resumen: { pacientes_activos: parseInt(pacientes.rows[0].total), tomas_hoy: parseInt(tomasHoy.rows[0].total), tareas_completadas_hoy: parseInt(tareasHoy.rows[0].total), staff: staff.rows },
@@ -3709,6 +4934,8 @@ app.get('/api/b2b/reportes', authB2BMiddleware, async (req, res) => {
     try {
         const { paciente_id, desde, hasta } = req.query;
         if (!paciente_id) return res.status(400).json({ error: 'paciente_id requerido' });
+        if (!(await checkB2BPacienteAccess(req.b2bUser, parseInt(paciente_id))))
+            return res.status(403).json({ error: 'Sin acceso a este paciente' });
         const iid = req.b2bUser.institucion_id;
         const d = desde || new Date(Date.now() - 30*24*60*60*1000).toISOString();
         const h = hasta || new Date().toISOString();
@@ -3789,7 +5016,7 @@ app.get('/api/b2b/reporte/export', authB2BMiddleware, async (req, res) => {
 // ---------- B2B: DOCUMENTOS ADJUNTOS ----------
 
 // POST /api/b2b/documentos — subir documento (base64) para un paciente (máx 5 MB)
-app.post('/api/b2b/documentos', authB2BMiddleware, async (req, res) => {
+app.post('/api/b2b/documentos', authB2BMiddleware, requireB2BRole('admin_institucion','cuidador_staff','medico'), requireActivePlan, async (req, res) => {
     try {
         const { paciente_id, nombre_archivo, tipo_mime, datos } = req.body;
         if (!paciente_id || !nombre_archivo || !datos)
@@ -3799,6 +5026,18 @@ app.post('/api/b2b/documentos', authB2BMiddleware, async (req, res) => {
         // Base64 de 5 MB ≈ 6.8 MB de texto; con margen: 7 MB de chars
         if (datos.length > 7 * 1024 * 1024)
             return res.status(413).json({ error: 'El archivo supera el límite de 5 MB' });
+        // Límite de almacenamiento por institución: 200 MB de datos base64
+        // (Railway Hobby plan: 5 GB total — 200 MB/institución deja margen para muchas instituciones)
+        const DOC_LIMIT = 200 * 1024 * 1024;
+        const storageCheck = await pool.query(
+            `SELECT COALESCE(SUM(LENGTH(datos)), 0) AS total FROM documentos_b2b WHERE institucion_id=$1`,
+            [req.b2bUser.institucion_id]
+        );
+        const usedBytes = parseInt(storageCheck.rows[0].total);
+        if (usedBytes + datos.length > DOC_LIMIT) {
+            const usedMB = (usedBytes / 1024 / 1024).toFixed(1);
+            return res.status(413).json({ error: `Límite de almacenamiento alcanzado (${usedMB} MB de 200 MB usados). Eliminá documentos anteriores para liberar espacio.` });
+        }
         const tamanio_bytes = Math.round(datos.length * 0.75);
         const result = await pool.query(
             `INSERT INTO documentos_b2b (institucion_id, paciente_id, nombre_archivo, tipo_mime, tamanio_bytes, datos, subido_por, subido_nombre)
@@ -3819,6 +5058,8 @@ app.get('/api/b2b/documentos', authB2BMiddleware, async (req, res) => {
     try {
         const { paciente_id } = req.query;
         if (!paciente_id) return res.status(400).json({ error: 'paciente_id requerido' });
+        if (req.b2bUser.rol === 'familiar' && !(await checkB2BFamiliarCanSee(req.b2bUser, 'documentos')))
+            return res.status(403).json({ error: 'Acceso restringido por la institución' });
         const hasAccess = await checkB2BPacienteAccess(req.b2bUser, parseInt(paciente_id));
         if (!hasAccess) return res.status(403).json({ error: 'Sin acceso a este paciente' });
         const result = await pool.query(
@@ -3872,6 +5113,164 @@ app.delete('/api/b2b/documentos/:id', authB2BMiddleware, async (req, res) => {
 // ============================================================
 // ========== FIN MÓDULO B2B ==========
 // ============================================================
+
+// ============================================================
+// ========== SUPERADMIN — Activación manual de planes =========
+// ============================================================
+// GET /api/admin/institucion/:id — Consulta datos de una institución (para el panel admin)
+app.get('/api/admin/institucion/:id', async (req, res) => {
+    const adminKey    = req.headers['x-admin-key'];
+    const expectedKey = process.env.SUPERADMIN_KEY;
+    if (!expectedKey) return res.status(503).json({ error: 'SUPERADMIN_KEY no configurada en el servidor' });
+    if (!adminKey || adminKey !== expectedKey) return res.status(401).json({ error: 'Clave de administrador inválida' });
+    try {
+        const result = await pool.query(
+            `SELECT i.id, i.nombre, i.tipo, i.email, i.telefono, i.plan, i.activa, i.created_at,
+                    i.trial_started_at, i.plan_manual_expires_at, i.mp_preapproval_id,
+                    (SELECT COUNT(*) FROM pacientes_b2b WHERE institucion_id=i.id AND activo=TRUE AND fecha_egreso IS NULL)::int AS pacientes_count,
+                    (SELECT COUNT(*) FROM usuarios_b2b WHERE institucion_id=i.id AND activo=TRUE AND rol != 'familiar')::int AS staff_count
+             FROM instituciones_b2b i WHERE i.id=$1`,
+            [parseInt(req.params.id)]
+        );
+        if (result.rowCount === 0) return res.status(404).json({ error: 'Institución no encontrada' });
+        res.json(result.rows[0]);
+    } catch (err) {
+        console.error('[SuperAdmin] get-institucion error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/admin/set-plan
+// Permite a EDEN SoftWork activar un plan manualmente para clientes
+// que pagan por transferencia bancaria o cualquier acuerdo directo.
+// Requiere el header: X-Admin-Key: <SUPERADMIN_KEY (env var en Railway)>
+//
+// Uso (curl):
+//   curl -X POST https://<backend>/api/admin/set-plan \
+//        -H "X-Admin-Key: tu_clave_secreta" \
+//        -H "Content-Type: application/json" \
+//        -d '{"institucion_id": 5, "plan": "pro", "note": "Transferencia 15/03"}'
+// Planes válidos: free | free_trial | free_expired | basico | pro | total
+app.post('/api/admin/set-plan', async (req, res) => {
+    const adminKey   = req.headers['x-admin-key'];
+    const expectedKey = process.env.SUPERADMIN_KEY;
+    if (!expectedKey) return res.status(503).json({ error: 'SUPERADMIN_KEY no configurada en el servidor' });
+    if (!adminKey || adminKey !== expectedKey) return res.status(401).json({ error: 'Clave de administrador inválida' });
+    try {
+        const { institucion_id, plan, months, note } = req.body;
+        if (!institucion_id || !plan) return res.status(400).json({ error: 'institucion_id y plan son requeridos' });
+        const validPlans = ['free', 'free_trial', 'free_expired', 'basico', 'pro', 'total'];
+        if (!validPlans.includes(plan)) return res.status(400).json({ error: `Plan inválido. Debe ser uno de: ${validPlans.join(', ')}` });
+
+        // free_trial: reiniciar el período de prueba con 60 días nuevos desde hoy
+        if (plan === 'free_trial') {
+            const result = await pool.query(
+                `UPDATE instituciones_b2b
+                 SET plan='free', plan_manual_expires_at=NULL, mp_preapproval_id=NULL,
+                     trial_started_at=NOW()
+                 WHERE id=$1
+                 RETURNING id, nombre, plan, trial_started_at`,
+                [parseInt(institucion_id)]
+            );
+            if (result.rowCount === 0) return res.status(404).json({ error: 'Institución no encontrada' });
+            const inst = result.rows[0];
+            const trialEnd = new Date(inst.trial_started_at);
+            trialEnd.setDate(trialEnd.getDate() + 60);
+            console.log(`[SuperAdmin] 🔄 Trial RESET: inst ${inst.id} (${inst.nombre}) → 60 días nuevos hasta ${trialEnd.toLocaleDateString('es-AR')}${note ? ` | Nota: ${note}` : ''}`);
+            return res.json({
+                success: true,
+                trial_reset: true,
+                institucion_id: inst.id,
+                nombre: inst.nombre,
+                plan: 'free',
+                trial_started_at: inst.trial_started_at
+            });
+        }
+
+        // free_expired: simular trial vencido para testing
+        // Setea plan='free' + trial_started_at=61 días atrás → el sistema lo trata como expirado
+        if (plan === 'free_expired') {
+            const expiredTrialDate = new Date();
+            expiredTrialDate.setDate(expiredTrialDate.getDate() - 61);
+            const result = await pool.query(
+                `UPDATE instituciones_b2b
+                 SET plan='free', plan_manual_expires_at=NULL, mp_preapproval_id=NULL,
+                     trial_started_at=$2
+                 WHERE id=$1
+                 RETURNING id, nombre, plan, trial_started_at`,
+                [parseInt(institucion_id), expiredTrialDate]
+            );
+            if (result.rowCount === 0) return res.status(404).json({ error: 'Institución no encontrada' });
+            const inst = result.rows[0];
+            console.log(`[SuperAdmin] 🧪 Plan TEST: inst ${inst.id} (${inst.nombre}) → free_expired (trial_started_at: ${expiredTrialDate.toLocaleDateString('es-AR')})${note ? ` | Nota: ${note}` : ''}`);
+            return res.json({
+                success: true,
+                test_mode: true,
+                institucion_id: inst.id,
+                nombre: inst.nombre,
+                plan: 'free_expired',
+                trial_started_at: inst.trial_started_at
+            });
+        }
+
+        // Validar límites de pacientes/staff para planes basico y pro
+        if (['basico', 'pro'].includes(plan)) {
+            const eligR = await pool.query(
+                `SELECT
+                    (SELECT COUNT(*) FROM pacientes_b2b WHERE institucion_id=$1 AND activo=TRUE AND fecha_egreso IS NULL) AS pac,
+                    (SELECT COUNT(*) FROM usuarios_b2b WHERE institucion_id=$1 AND activo=TRUE AND rol != 'familiar') AS stf`,
+                [parseInt(institucion_id)]
+            );
+            const curPac = parseInt(eligR.rows[0]?.pac) || 0;
+            const curStf = parseInt(eligR.rows[0]?.stf) || 0;
+            const limPac = plan === 'basico' ? 15 : 40;
+            const limStf = plan === 'basico' ? 8  : 20;
+            if (curPac > limPac || curStf > limStf) {
+                const parts = [];
+                if (curPac > limPac) parts.push(`${curPac} pacientes activos (máx. ${limPac})`);
+                if (curStf > limStf) parts.push(`${curStf} staff activo (máx. ${limStf})`);
+                const planLabel = plan === 'basico' ? 'Básico' : 'PRO';
+                return res.status(403).json({
+                    error: `No se puede asignar Plan ${planLabel}: la institución tiene ${parts.join(' y ')}. Usá Plan Total o reducí los registros primero.`,
+                    pacientes_count: curPac,
+                    staff_count: curStf
+                });
+            }
+        }
+
+        // Calcular fecha de vencimiento manual
+        let expiresAt = null;
+        if (plan !== 'free' && months && parseInt(months) > 0) {
+            expiresAt = new Date();
+            expiresAt.setMonth(expiresAt.getMonth() + parseInt(months));
+        }
+
+        const result = await pool.query(
+            `UPDATE instituciones_b2b
+             SET plan=$1, plan_manual_expires_at=$2, mp_preapproval_id=NULL
+             WHERE id=$3
+             RETURNING id, nombre, plan, plan_manual_expires_at`,
+            [plan, expiresAt, parseInt(institucion_id)]
+        );
+        if (result.rowCount === 0) return res.status(404).json({ error: 'Institución no encontrada' });
+        const inst = result.rows[0];
+        const expiryLabel = inst.plan_manual_expires_at
+            ? ` | Vence: ${new Date(inst.plan_manual_expires_at).toLocaleDateString('es-AR')}`
+            : (plan !== 'free' ? ' | Sin vencimiento' : '');
+        console.log(`[SuperAdmin] ✅ Plan actualizado — inst ${inst.id} (${inst.nombre}) → ${plan}${expiryLabel}${note ? ` | Nota: ${note}` : ''}`);
+        res.json({
+            success: true,
+            institucion_id: inst.id,
+            nombre: inst.nombre,
+            plan: inst.plan,
+            plan_manual_expires_at: inst.plan_manual_expires_at
+        });
+    } catch (err) {
+        console.error('[SuperAdmin] set-plan error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
     console.log(`✅ Servidor escuchando en puerto ${PORT}`);
@@ -3885,6 +5284,11 @@ app.listen(PORT, async () => {
         setInterval(syncMPSubscriptions, 4 * 60 * 60 * 1000); // luego cada 4 horas
         console.log('✅ Sync periódico de suscripciones MP activado (cada 4 horas)');
     }
+
+    // Recordatorios de vencimiento de trial: chequea diariamente
+    setTimeout(checkTrialReminders, 2 * 60 * 1000); // primer chequeo 2min después del boot
+    setInterval(checkTrialReminders, 24 * 60 * 60 * 1000); // luego cada 24 horas
+    console.log('✅ Recordatorios de vencimiento de trial activados (cada 24 horas)');
 
     // Keep-alive: evita que Railway duerma el servidor en planes gratuitos.
     // Se hace un GET a /health propio cada 4 minutos.
